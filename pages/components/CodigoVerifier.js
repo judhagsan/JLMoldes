@@ -11,7 +11,7 @@ const CodigoVerifier = ({ codigo }) => {
       }
 
       try {
-        const response = await fetch("/api/v1/tables");
+        const response = await fetch("/api/v1/tables/verificador", {});
         if (!response.ok) throw new Error("Erro ao buscar dados");
 
         const data = await response.json();

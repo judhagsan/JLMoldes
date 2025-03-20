@@ -8,7 +8,7 @@ const TabelaM = ({ codigo }) => {
 
   const fetchData = async () => {
     try {
-      const response = await fetch("/api/v1/tables"); // URL correta para o endpoint
+      const response = await fetch("/api/v1/Base"); // URL correta para o endpoint
       if (!response.ok) throw new Error("Erro ao carregar os dados");
       const data = await response.json();
 
@@ -30,7 +30,7 @@ const TabelaM = ({ codigo }) => {
 
   const handleSave = async (editedData) => {
     try {
-      const response = await fetch("/api/v1/tables", {
+      const response = await fetch("/api/v1/Base", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editedData),
@@ -109,7 +109,7 @@ const TabelaM = ({ codigo }) => {
   const filteredGroupedData = Object.fromEntries(
     Object.entries(groupedData).filter((entry) => {
       const items = entry[1]; //acessa o value do entry.
-      return items.some((item) => item.sis > 0 || item.alt > 0);
+      return items.some((item) => item.base > 0);
     }),
   );
   //Se nenhum grupo passar no filtro, nao renderiza nada.
@@ -129,8 +129,7 @@ const TabelaM = ({ codigo }) => {
               <th className="hidden">CODIGO</th>
               <th>DEC</th>
               <th>Nome</th>
-              <th>Sis</th>
-              <th>Alt</th>
+              <th>Base</th>
               <th>Ações</th>
             </tr>
           </thead>
@@ -197,47 +196,22 @@ const TabelaM = ({ codigo }) => {
                         item.nome
                       )}
                     </td>
+
                     <td>
                       {editingId === item.id ? (
                         <input
                           type="number"
-                          min="1"
-                          value={editedData.sis}
-                          onChange={(e) => {
-                            if (isNaN(e.target.value) || e.target.value <= 0) {
-                              // If not a number or less than or equal to 0, set to 1 or empty string
-                              handleInputChange("sis", 1); // Set to 1
-                              // Or, if you want to clear the input:
-                              // handleInputChange("sis", "");
-                            } else {
-                              handleInputChange("sis", e.target.value);
-                            }
-                          }}
+                          value={editedData.base}
+                          onChange={(e) =>
+                            handleInputChange("base", e.target.value)
+                          }
                           className="input input-xs p-0 m-0 text-center"
                         />
                       ) : (
-                        item.sis
+                        item.base
                       )}
                     </td>
-                    <td>
-                      {editingId === item.id ? (
-                        <input
-                          type="number"
-                          min="1"
-                          value={editedData.alt}
-                          onChange={(e) => {
-                            if (isNaN(e.target.value) || e.target.value <= 0) {
-                              handleInputChange("alt", 1);
-                            } else {
-                              handleInputChange("alt", e.target.value);
-                            }
-                          }}
-                          className="input input-xs p-0 m-0 text-center"
-                        />
-                      ) : (
-                        item.alt
-                      )}
-                    </td>
+
                     <td>
                       <button
                         className={`btn btn-xs btn-soft btn-warning ${editingId === item.id ? "hidden" : ""}`}
