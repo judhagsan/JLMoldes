@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import TabelaM from "./TabelaM.js";
 import TabelaMRight from "./TabelaMRight.js";
 import CodigoVerifier from "./CodigoVerifier.js";
-import Calculadora from "./Calculadora.js";
 import ErrorComponent from "./Errors.js";
+import R1content from "./R1Content.js";
 const Mcontent = () => {
   const [observacao, setObservacao] = useState("");
   const [dec, setDec] = useState("");
@@ -12,7 +12,7 @@ const Mcontent = () => {
   const [sis, setSis] = useState("");
   const [base, setBase] = useState("");
   const [alt, setAlt] = useState("");
-  const [showError, setShowError] = useState(false);
+  const [showError, setErrorCode] = useState(false);
 
   // Busca a observação correspondente ao código digitado
   useEffect(() => {
@@ -87,8 +87,12 @@ const Mcontent = () => {
 
     // Se todos os valores forem 0, exibe o erro e interrompe a execução
     if (parseInt(base) === 0 && parseInt(sis) === 0 && parseInt(alt) === 0) {
-      showErrorToast();
+      setErrorCode("");
+      setTimeout(() => {
+        setErrorCode("000BSA"); // Define um novo código de erro depois de um pequeno delay
+      }, 0);
     } else {
+      setErrorCode("");
       if (parseInt(base) > 0) {
         try {
           const responseBase = await fetch("/api/v1/tables", {
@@ -166,13 +170,6 @@ const Mcontent = () => {
     }
   };
 
-  const showErrorToast = () => {
-    setShowError(true);
-    setTimeout(() => {
-      setShowError(false);
-    }, 5000);
-  };
-
   return (
     <div className="h-full">
       {/* Formulário */}
@@ -216,18 +213,18 @@ const Mcontent = () => {
           <input
             type="number"
             required
-            placeholder="Sis"
-            className="input input-info input-xs w-24"
-            value={sis}
-            onChange={(e) => setSis(e.target.value)}
-          />
-          <input
-            type="number"
-            required
             placeholder="Base"
             className="input input-info input-xs w-24"
             value={base}
             onChange={(e) => setBase(e.target.value)}
+          />
+          <input
+            type="number"
+            required
+            placeholder="Sis"
+            className="input input-info input-xs w-24"
+            value={sis}
+            onChange={(e) => setSis(e.target.value)}
           />
           <input
             type="number"
@@ -251,9 +248,10 @@ const Mcontent = () => {
       </div>
       <div className="divider divider-neutral">OFICINA</div>
       <div>
-        <Calculadora />
+        <R1content codigoExterno={codigo} />
       </div>
-      {showError && <ErrorComponent errorCode="000SAB" />}
+
+      {showError && <ErrorComponent errorCode="000BSA" />}
     </div>
   );
 };

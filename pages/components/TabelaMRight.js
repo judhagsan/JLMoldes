@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from "react";
 import EditM from "./Edit";
+import Execute from "models/functions";
+import Use from "models/utils";
+import ErrorComponent from "./Errors.js";
 
 const TabelaM = ({ codigo }) => {
   const [dados, setDados] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editedData, setEditedData] = useState({});
+  const [showError, setErrorCode] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -36,7 +40,14 @@ const TabelaM = ({ codigo }) => {
         body: JSON.stringify(editedData),
       });
 
+      const response2 = await fetch("/api/v1/tables/R1", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editedData),
+      });
+
       if (!response.ok) throw new Error("Erro ao atualizar");
+      if (!response2.ok) throw new Error("Erro ao atualizar");
 
       setDados(
         dados.map((item) =>
@@ -55,17 +66,6 @@ const TabelaM = ({ codigo }) => {
     return () => clearInterval(intervalId); // Limpa o intervalo ao desmontar o componente
   }, []);
 
-  async function deleteM1TableRecord(id) {
-    const response = await fetch("/api/v1/tables", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }), // Envia o `id` no corpo da requisição
-    });
-
-    const result = await response.json();
-    console.log(result);
-  }
-
   const handleInputChange = (field, value) => {
     setEditedData((prev) => ({ ...prev, [field]: value }));
   };
@@ -75,44 +75,6 @@ const TabelaM = ({ codigo }) => {
   };
 
   // Função para formatar a data
-  const formatarData = (dataStr) => {
-    const data = new Date(dataStr);
-
-    // Obtendo o nome do dia da semana por extenso
-    const diasDaSemana = [
-      "domingo",
-      "lunes",
-      "martes",
-      "miércoles",
-      "jueves",
-      "viernes",
-      "sábado",
-    ];
-    const nomeDia = diasDaSemana[data.getDay()];
-
-    // Meses abreviados
-    const mesesAbreviados = [
-      "ene",
-      "feb",
-      "mar",
-      "abr",
-      "may",
-      "jun",
-      "jul",
-      "ago",
-      "sep",
-      "oct",
-      "nov",
-      "dic",
-    ];
-    const mes = mesesAbreviados[data.getMonth()];
-
-    const dia = String(data.getDate()).padStart(2, "0");
-    const horas = String(data.getHours()).padStart(2, "0");
-    const minutos = String(data.getMinutes()).padStart(2, "0");
-
-    return `${nomeDia}, ${dia}/${mes} ${horas}:${minutos}`;
-  };
 
   // Agrupar os dados por DEC
   const groupedData = dados.reduce((acc, item) => {
@@ -164,11 +126,13 @@ const TabelaM = ({ codigo }) => {
                     className={
                       item.codigo === codigo
                         ? "bg-green-200 border-b border-gray-700"
-                        : "border-b border-gray-700"
+                        : item.r1 === true
+                          ? "bg-yellow-100 border-b border-gray-700"
+                          : "border-b border-gray-700"
                     }
                   >
                     <td className="hidden">{item.id}</td>
-                    <td>{formatarData(item.data)}</td>
+                    <td>{Use.formatarData(item.data)}</td>
                     <td>
                       {editingId === item.id ? (
                         <input
@@ -235,9 +199,28 @@ const TabelaM = ({ codigo }) => {
                     <td>
                       <button
                         className={`btn btn-xs btn-soft btn-warning ${editingId === item.id ? "hidden" : ""}`}
+                        onClick={async () => {
+                          try {
+                            await Execute.sendTrueMR1(item.id);
+                            setErrorCode(null); // Reset do erro antes da tentativa
+                            await Execute.sendToR1({
+                              ...item,
+                              sis: item.sis || 0,
+                              alt: item.alt || 0,
+                              base: item.base || 0,
+                            });
+                            fetchData();
+                          } catch (error) {
+                            setErrorCode(item.id); // Define o ID do item com erro
+                          }
+                        }}
                       >
                         R1
                       </button>
+
+                      {showError === item.id && (
+                        <ErrorComponent errorCode="R1ID" />
+                      )}
                       <button
                         className={`btn btn-xs btn-soft btn-primary ${editingId === item.id ? "hidden" : ""}`}
                       >
@@ -248,11 +231,6 @@ const TabelaM = ({ codigo }) => {
                       >
                         R3
                       </button>
-                      <button
-                        className={`btn btn-xs btn-soft btn-secondary ${editingId === item.id ? "hidden" : ""}`}
-                      >
-                        M1
-                      </button>
                       <EditM
                         isEditing={editingId === item.id}
                         onEdit={() => startEditing(item)}
@@ -261,7 +239,7 @@ const TabelaM = ({ codigo }) => {
                       />
                       <button
                         className={`btn btn-xs btn-soft btn-error ${editingId === item.id ? "hidden" : ""}`}
-                        onClick={() => deleteM1TableRecord(item.id)}
+                        onClick={() => Execute.removeM1andR1(item.id)}
                       >
                         Excluir
                       </button>

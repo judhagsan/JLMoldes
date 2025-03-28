@@ -9,6 +9,9 @@ exports.up = (pgm) => {
     sis: { type: "numeric", notNull: true },
     base: { type: "numeric", notNull: true },
     alt: { type: "numeric", notNull: true },
+    r1: { type: "boolean", notNull: true, default: false },
+    r2: { type: "boolean", notNull: true, default: false },
+    r3: { type: "boolean", notNull: true, default: false },
   });
 };
 

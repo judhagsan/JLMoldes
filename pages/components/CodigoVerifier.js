@@ -11,16 +11,34 @@ const CodigoVerifier = ({ codigo }) => {
       }
 
       try {
-        const response = await fetch("/api/v1/tables/verificador", {});
-        if (!response.ok) throw new Error("Erro ao buscar dados");
+        const response1 = await fetch("/api/v1/tables/verificador", {});
+        if (!response1.ok)
+          throw new Error("Erro ao buscar dados da primeira tabela");
 
-        const data = await response.json();
-        if (Array.isArray(data.rows)) {
-          const matchingCodes = data.rows.filter(
+        const data1 = await response1.json();
+        let count1 = 0;
+        if (Array.isArray(data1.rows)) {
+          const matchingCodes1 = data1.rows.filter(
             (item) => item.codigo === codigo,
           );
-          setCount(matchingCodes.length);
+          count1 = matchingCodes1.length;
         }
+
+        const response2 = await fetch("/api/v1/tables/R1", {});
+        if (!response2.ok)
+          throw new Error("Erro ao buscar dados da segunda tabela");
+
+        const data2 = await response2.json();
+        let count2 = 0;
+        if (Array.isArray(data2.rows)) {
+          const matchingCodes2 = data2.rows.filter(
+            (item) => item.codigo === codigo,
+          );
+          count2 = matchingCodes2.length;
+        }
+
+        // Somando os resultados das duas tabelas e atualizando o estado
+        setCount(count1 + count2);
       } catch (error) {
         console.error("Erro ao verificar código:", error);
       }
