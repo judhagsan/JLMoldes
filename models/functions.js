@@ -95,6 +95,70 @@ async function sendToDevo(itemData) {
     throw error;
   }
 }
+
+async function sendToC1(itemData) {
+  try {
+    const response = await fetch("/api/v1/tables/c1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        codigo: itemData.codigo,
+        data: itemData.data,
+        nome: itemData.nome,
+        sis: itemData.sis,
+        alt: itemData.alt,
+        base: itemData.base,
+        real: itemData.real,
+        pix: itemData.pix,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Erro ao criar registro em C1");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Erro no createC1:", error);
+    throw error;
+  }
+}
+
+async function sendToPapelC1(itemData) {
+  try {
+    const response = await fetch("/api/v1/tables/c1/papel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        codigo: itemData.codigo,
+        data: itemData.data,
+        nome: itemData.nome,
+        multi: itemData.multi,
+        papel: itemData.papel,
+        papelpix: itemData.papelpix,
+        papelreal: itemData.papelreal,
+        encaixepix: itemData.encaixepix,
+        encaixereal: itemData.encaixereal,
+        desperdicio: itemData.desperdicio,
+        util: itemData.util,
+        perdida: itemData.perdida,
+        comentarios: itemData.comentario,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Erro ao criar registro em C1");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Erro no createPapelC1:", error);
+    throw error;
+  }
+}
+
 async function reciveFromR1DeveDevo(tableName) {
   try {
     const response = await fetch(`/api/v1/tables/${tableName}`);
@@ -199,6 +263,50 @@ async function reciveFromDevo() {
   }
 }
 
+async function reciveFromC1() {
+  try {
+    const response = await fetch("/api/v1/tables/c1");
+    if (!response.ok) throw new Error("Erro ao carregar os dados");
+    const data = await response.json();
+    return Array.isArray(data.rows) ? data.rows : [];
+  } catch (error) {
+    console.error("Erro ao buscar dados deve:", error);
+    return [];
+  }
+}
+
+async function reciveFromC1Data(codigo, data) {
+  try {
+    // Codifica 'data' para enviar como parâmetro na URL
+    const encodedData = encodeURIComponent(JSON.stringify(data));
+
+    const response = await fetch(
+      `/api/v1/tables/c1/calculadora?codigo=${codigo}&data=${encodedData}`,
+    );
+
+    if (!response.ok) throw new Error("Erro ao carregar os dados");
+    const result = await response.json();
+
+    // Retorna diretamente o booleano 'exists' vindo do servidor
+    return result.exists; // true ou false
+  } catch (error) {
+    console.error("Erro ao buscar dados:", error);
+    return false;
+  }
+}
+
+async function reciveFromPapelC1() {
+  try {
+    const response = await fetch("/api/v1/tables/c1/papel");
+    if (!response.ok) throw new Error("Erro ao carregar os dados");
+    const data = await response.json();
+    return Array.isArray(data.rows) ? data.rows : [];
+  } catch (error) {
+    console.error("Erro ao buscar dados deve:", error);
+    return [];
+  }
+}
+
 async function reciveFromR1JustBSA(codigo) {
   try {
     const response = await fetch(`/api/v1/tables/calculadora?codigo=${codigo}`);
@@ -248,6 +356,28 @@ async function removeM1andR1(id) {
   console.log(result2);
 }
 
+async function removeC1(id) {
+  const response = await fetch("/api/v1/tables/c1", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }), // Envia o `id` no corpo da requisição
+  });
+
+  const result = await response.json();
+  console.log(result);
+}
+
+async function removePapelC1(id) {
+  const response = await fetch("/api/v1/tables/c1/papel", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }), // Envia o `id` no corpo da requisição
+  });
+
+  const result = await response.json();
+  console.log(result);
+}
+
 async function removeDeve(codigo) {
   const response = await fetch("/api/v1/tables/deve", {
     method: "DELETE",
@@ -275,6 +405,11 @@ const execute = {
   sendToR1,
   sendToDeve,
   sendToDevo,
+  sendToC1,
+  sendToPapelC1,
+  reciveFromC1,
+  reciveFromC1Data,
+  reciveFromPapelC1,
   reciveFromR1DeveDevo,
   reciveFromDeve,
   reciveFromDeveJustValor,
@@ -282,6 +417,8 @@ const execute = {
   reciveFromDevoJustValor,
   reciveFromR1,
   reciveFromR1JustBSA,
+  removeC1,
+  removePapelC1,
   removeM1andR1,
   removeDeve,
   removeDevo,

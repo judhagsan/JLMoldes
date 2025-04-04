@@ -63,6 +63,7 @@ const TabelaM = () => {
   const handleInputChange = (field, value) => {
     setEditedData((prev) => ({ ...prev, [field]: value }));
   };
+
   const startEditing = (item) => {
     setEditingId(item.id);
     setEditedData({ ...item });

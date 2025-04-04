@@ -1,6 +1,7 @@
 exports.up = (pgm) => {
   pgm.createTable("C1", {
-    id: { type: "numeric", notNull: true },
+    id: { type: "serial", primaryKey: true },
+    codigo: { type: "text", notNull: true },
     data: { type: "timestamptz", notNull: true },
     nome: { type: "text", notNull: true },
     sis: { type: "numeric", notNull: true },

@@ -4,6 +4,7 @@ import { CircleSlashIcon } from "@primer/octicons-react";
 const errorMessages = {
   "000BSA": "Base, Sis e Alt Não devem ser 0 todos ao mesmo tempo.",
   R1ID: "Essa Operação ja foi enviada.",
+  Nulo: "Nenhuma operação foi efetuada.",
 };
 
 function ErrorComponent({ errorCode }) {
@@ -15,7 +16,7 @@ function ErrorComponent({ errorCode }) {
     setShowError(true);
     setTimeout(() => {
       setShowError(false);
-    }, 5000);
+    }, 3000);
   };
 
   // Chama a função quando o código de erro é passado

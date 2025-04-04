@@ -13,36 +13,48 @@ const R1content = ({ codigoExterno }) => {
   // Se o codigoExterno for passado, não alteramos o estado de codigo
   const [codigo, setCodigo] = useState(codigoExterno || "");
   const [nome, setNome] = useState("");
+  const [data, setData] = useState();
 
   useEffect(() => {
-    // Atualizando a referência se codigoExterno mudar
     if (codigoExterno !== codigoExternoRef.current) {
       codigoExternoRef.current = codigoExterno;
-      setCodigo(codigoExterno || ""); // Se o codigoExterno for vazio, mantemos o código vazio
+      setCodigo(codigoExterno || "");
     }
   }, [codigoExterno]);
 
   useEffect(() => {
     let isMounted = true;
+
     const fetchNome = async () => {
       if (!codigo) {
-        if (isMounted) setNome("");
+        if (isMounted) {
+          setNome("");
+          setData(undefined);
+        }
         return;
       }
 
       try {
-        let foundNome = "";
+        let foundItem = null;
         for (const table of tablesToSearch.current) {
           const items = await Execute.reciveFromR1DeveDevo(table);
-          const foundItem = items.find((item) => item.codigo === codigo);
-          if (foundItem) {
-            foundNome = foundItem.nome;
-            break;
-          }
+          foundItem = items.find((item) => item.codigo === codigo);
+          if (foundItem) break;
         }
-        if (isMounted) setNome(foundNome);
+
+        if (isMounted && foundItem) {
+          setNome(foundItem.nome || "");
+          setData(foundItem.data);
+        } else if (isMounted) {
+          setNome("");
+          setData(undefined);
+        }
       } catch (error) {
         console.error("Falha ao buscar nome:", error);
+        if (isMounted) {
+          setNome("");
+          setData(undefined);
+        }
       }
     };
 
@@ -50,7 +62,7 @@ const R1content = ({ codigoExterno }) => {
     return () => {
       isMounted = false;
     };
-  }, [codigo]);
+  }, [codigo]); // Apenas codigo como dependência
 
   // Busca codigo quando nome muda
   useEffect(() => {
@@ -109,6 +121,7 @@ const R1content = ({ codigoExterno }) => {
             nome={nome}
             onCodigoChange={handleCodigoChange} // Passando a função de alteração para a Calculadora
             onNomeChange={handleNomeChange} // Passando a função de alteração para a Calculadora
+            data={data}
           />
           <Devo codigo={codigo} />
         </div>
