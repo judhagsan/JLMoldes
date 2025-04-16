@@ -1,5 +1,5 @@
 exports.up = (pgm) => {
-  pgm.createTable("PapelC1", {
+  pgm.createTable("PapelC", {
     id: { type: "serial", primaryKey: true },
     codigo: { type: "text", notNull: true },
     data: { type: "timestamptz", notNull: true },

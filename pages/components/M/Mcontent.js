@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import TabelaM from "./TabelaM.js";
-import TabelaMRight from "./TabelaMRight.js";
-import CodigoVerifier from "./CodigoVerifier.js";
-import ErrorComponent from "./Errors.js";
-import R1content from "./R1Content.js";
-import Config from "./Config.js";
+import CodigoVerifier from "../CodigoVerifier.js";
+import ErrorComponent from "../Errors.js";
+import Rcontent from "../R/RContent.js";
+import Config from "../Config.js";
 
-const Mcontent = () => {
+const Mcontent = ({ oficina, r }) => {
   const [observacao, setObservacao] = useState("");
   const [dec, setDec] = useState("");
   const [codigo, setCodigo] = useState("");
@@ -82,7 +81,16 @@ const Mcontent = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const ordemInputValues = { observacao, codigo, dec, nome, sis, base, alt };
+    const ordemInputValues = {
+      oficina,
+      observacao,
+      codigo,
+      dec,
+      nome,
+      sis,
+      base,
+      alt,
+    };
 
     // Condição para separar os dados em duas tabelas
     let hasInserted = false; // Flag para evitar inserções duplicadas
@@ -101,6 +109,7 @@ const Mcontent = () => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              oficina,
               observacao,
               codigo,
               dec,
@@ -126,6 +135,7 @@ const Mcontent = () => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              oficina,
               observacao,
               codigo,
               dec,
@@ -242,19 +252,23 @@ const Mcontent = () => {
           <button type="submit" className="btn btn-xs btn-info">
             Enviar
           </button>
-          <CodigoVerifier codigo={codigo} /> {/* Exibe a contagem ao lado */}
+          <CodigoVerifier codigo={codigo} oficina={oficina} />
         </form>
         <Config />
       </div>
-
-      {/* Tabelas */}
       <div className="columns-2">
-        <TabelaM codigo={codigo} />
-        <TabelaMRight codigo={codigo} />
+        <TabelaM oficina={oficina} />
+        <TabelaM
+          oficina={oficina}
+          mainEndpoint="Base"
+          secondaryEndpoint="tables/R"
+          columnsConfig={[{ field: "base", label: "Base", min: 0 }]}
+          filterCondition={(item) => item.base > 0}
+        />
       </div>
       <div className="divider divider-neutral">OFICINA</div>
       <div>
-        <R1content codigoExterno={codigo} />
+        <Rcontent codigoExterno={codigo} r={r} />
       </div>
 
       {showError && <ErrorComponent errorCode="000BSA" />}

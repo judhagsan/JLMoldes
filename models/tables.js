@@ -1,9 +1,9 @@
 import database from "infra/database.js";
 
-async function createC1(ordemInputValues) {
+async function createC(ordemInputValues) {
   const result = await database.query({
     text: `
-      INSERT INTO "C1" (codigo, data, nome, sis, alt, base, real, pix) 
+      INSERT INTO "C" (codigo, data, nome, sis, alt, base, real, pix) 
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *;
     `,
@@ -70,10 +70,10 @@ async function createOficina(ordemInputValues) {
   return result;
 }
 
-async function createPapelC1(ordemInputValues) {
+async function createPapelC(ordemInputValues) {
   const result = await database.query({
     text: `
-      INSERT INTO "PapelC1" (codigo, data, nome, multi, papel, papelpix, papelreal, encaixepix, encaixereal, desperdicio, util, perdida, comentarios ) 
+      INSERT INTO "PapelC" (codigo, data, nome, multi, papel, papelpix, papelreal, encaixepix, encaixereal, desperdicio, util, perdida, comentarios ) 
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *;
     `,
@@ -97,14 +97,15 @@ async function createPapelC1(ordemInputValues) {
   return result;
 }
 
-async function createM1(ordemInputValues) {
+async function createM(ordemInputValues) {
   const result = await database.query({
     text: `
-      INSERT INTO "m1table" (observacao, codigo, dec, nome, sis, base, alt) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO "Mtable" (oficina, observacao, codigo, dec, nome, sis, base, alt) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *;
     `,
     values: [
+      ordemInputValues.oficina,
       ordemInputValues.observacao,
       ordemInputValues.codigo,
       ordemInputValues.dec,
@@ -118,15 +119,16 @@ async function createM1(ordemInputValues) {
   return result;
 }
 
-async function createR1BSA(ordemInputValues) {
+async function createRBSA(ordemInputValues) {
   const result = await database.query({
     text: `
-      INSERT INTO "R1BSA" (id, codigo, nome, sis, alt, base) 
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO "RBSA" (id, r, codigo, nome, sis, alt, base) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *;
     `,
     values: [
       ordemInputValues.id,
+      ordemInputValues.r,
       ordemInputValues.codigo,
       ordemInputValues.nome,
       ordemInputValues.sis,
@@ -175,7 +177,7 @@ async function createDeve(ordemInputValues) {
 async function updateAltSis(updatedData) {
   const result = await database.query({
     text: `
-      UPDATE "m1table"
+      UPDATE "Mtable"
       SET 
         observacao = $1,
         dec = $2,
@@ -198,10 +200,10 @@ async function updateAltSis(updatedData) {
   return result;
 }
 
-async function updateC1(updatedData) {
+async function updateC(updatedData) {
   const result = await database.query({
     text: `
-      UPDATE "C1"
+      UPDATE "C"
       SET 
         nome = $1,
         base = $2,
@@ -243,10 +245,10 @@ async function updateConfig(updatedData) {
   return result;
 }
 
-async function updateC1BSA(updatedData) {
+async function updateCBSA(updatedData) {
   const result = await database.query({
     text: `
-      UPDATE "C1"
+      UPDATE "C"
       SET 
         base = base + $1,
         sis = sis + $2,
@@ -270,10 +272,10 @@ async function updateC1BSA(updatedData) {
   return result;
 }
 
-async function updatePapelC1(updatedData) {
+async function updatePapelC(updatedData) {
   const result = await database.query({
     text: `
-      UPDATE "PapelC1"
+      UPDATE "PapelC"
       SET 
         nome = $1,
         multi = $2,
@@ -376,23 +378,34 @@ async function updateOficina(updatedData) {
   return result;
 }
 
-async function updateR1Button(updatedData) {
+async function updateRButton(updatedData) {
+  // Extrai a chave dinâmica (ex: 'r1', 'r2') dos dados recebidos
+  const rColumn = Object.keys(updatedData).find(
+    (key) => key.startsWith("r") && key !== "id" && /^r\d+$/.test(key), // Valida o formato 'r' seguido de números
+  );
+
+  if (!rColumn) {
+    throw new Error("Coluna R inválida");
+  }
+
+  // Usa a coluna identificada na query SQL
   const result = await database.query({
     text: `
-      UPDATE "m1table"
-      SET r1 = $1
+      UPDATE "Mtable"
+      SET ${rColumn} = $1
       WHERE id = $2
       RETURNING *;
     `,
     values: [true, updatedData.id],
   });
+
   return result.rows[0];
 }
 
-async function updateAltSisR1(updatedData) {
+async function updateAltSisR(updatedData) {
   const result = await database.query({
     text: `
-      UPDATE "R1BSA"
+      UPDATE "RBSA"
       SET 
         nome = $1,
         base = $2,
@@ -413,7 +426,7 @@ async function updateAltSisR1(updatedData) {
   return result;
 }
 
-async function updateR1Calculadora(updatedData) {
+async function updateRCalculadora(updatedData) {
   const result = await database.query({
     text: `
       WITH current_totals AS (
@@ -422,7 +435,7 @@ async function updateR1Calculadora(updatedData) {
           SUM(base) AS total_base,
           SUM(sis) AS total_sis,
           SUM(alt) AS total_alt
-        FROM "R1BSA"
+        FROM "RBSA"
         WHERE codigo = $4
           AND (base > 0 OR sis > 0 OR alt > 0)
         GROUP BY codigo
@@ -433,7 +446,7 @@ async function updateR1Calculadora(updatedData) {
           $2::numeric AS desired_sis,
           $3::numeric AS desired_alt
       )
-      UPDATE "R1BSA" r1
+      UPDATE "RBSA" r1
       SET
         base = CASE 
           WHEN ct.total_base = 0 THEN r1.base
@@ -466,7 +479,7 @@ async function updateR1Calculadora(updatedData) {
 async function updateBase(updatedData) {
   const result = await database.query({
     text: `
-      UPDATE "m1table"
+      UPDATE "Mtable"
       SET 
         observacao = $1,
         dec = $2,
@@ -549,9 +562,9 @@ async function updateDeve(updatedData) {
   return result;
 }
 
-async function getC1() {
+async function getC() {
   const result = await database.query({
-    text: `SELECT * FROM "C1"`,
+    text: `SELECT * FROM "C"`,
   });
   return result;
 }
@@ -580,9 +593,9 @@ async function getConfig() {
 }
 
 // Modificação no getC1Data
-async function getC1Data(codigo, data) {
+async function getCData(codigo, data) {
   const result = await database.query({
-    text: `SELECT EXISTS(SELECT 1 FROM "C1" WHERE codigo = $1 AND data = $2) AS exists;`,
+    text: `SELECT EXISTS(SELECT 1 FROM "C" WHERE codigo = $1 AND data = $2) AS exists;`,
     values: [codigo, data], // Supondo que 'data' seja um objeto compatível com o tipo da coluna
   });
 
@@ -608,23 +621,32 @@ async function getPapelData(codigo, data) {
   return result.rows[0].exists;
 }
 
-async function getPapelC1() {
+async function getPapelC() {
   const result = await database.query({
-    text: `SELECT * FROM "PapelC1"`,
+    text: `SELECT * FROM "PapelC"`,
   });
   return result;
 }
 
-async function getM1TableAltSis() {
+async function getMTableAltSis(oficina) {
   const result = await database.query({
-    text: `SELECT id, data, observacao, codigo, dec, nome, sis, alt, r1, r2, r3 FROM "m1table" WHERE sis > 0 OR alt > 0 ORDER BY data DESC;`,
+    text: `SELECT id, data, observacao, codigo, dec, nome, sis, alt, r1, r2, r3 
+           FROM "Mtable" 
+           WHERE oficina = $1 
+           AND (sis > 0 OR alt > 0) 
+           ORDER BY data DESC;`,
+    values: [oficina],
   });
   return result;
 }
 
-async function getM1TableBase() {
+async function getMTableBase(oficina) {
   const result = await database.query({
-    text: `SELECT id, data, observacao, codigo, dec, nome, base, r1, r2, r3 FROM "m1table" WHERE base > 0 ORDER BY data DESC;`,
+    text: `SELECT id, data, observacao, codigo, dec, nome, base, r1, r2, r3 
+           FROM "Mtable" 
+           WHERE oficina = $1 
+           AND base > 0 ORDER BY data DESC;`,
+    values: [oficina],
   });
   return result;
 }
@@ -635,9 +657,10 @@ async function getVerificador() {
   });
   return result;
 }
-async function getR1BSA() {
+async function getRBSA(r) {
   const result = await database.query({
-    text: `SELECT * FROM "R1BSA"`,
+    text: `SELECT * FROM "RBSA" WHERE r=$1`,
+    values: [r],
   });
   return result;
 }
@@ -655,10 +678,10 @@ async function getDevo() {
   return result;
 }
 
-async function getR1JustBSA(codigo) {
+async function getRJustBSA(codigo) {
   const result = await database.query({
     text: `SELECT 
-            (SELECT array_agg(id) FROM "R1BSA" WHERE codigo = $1) AS ids,  -- Todos os IDs em um array
+            (SELECT array_agg(id) FROM "RBSA" WHERE codigo = $1) AS ids,  -- Todos os IDs em um array
             SUM(base) AS total_base,
             SUM(sis) AS total_sis,
             SUM(alt) AS total_alt
@@ -711,25 +734,25 @@ async function getDevoJustValor(codigo) {
   );
 }
 
-async function deleteM1(ids) {
+async function deleteM(ids) {
   const result = await database.query({
-    text: `DELETE FROM "m1table" WHERE id = ANY($1) RETURNING *`,
+    text: `DELETE FROM "Mtable" WHERE id = ANY($1) RETURNING *`,
     values: [ids],
   });
   return result.rows;
 }
 
-async function deleteC1(ids) {
+async function deleteC(ids) {
   const result = await database.query({
-    text: `DELETE FROM "C1" WHERE id = $1 RETURNING *`,
+    text: `DELETE FROM "C" WHERE id = $1 RETURNING *`,
     values: [ids],
   });
   return result.rows;
 }
 
-async function deletePapelC1(ids) {
+async function deletePapelC(ids) {
   const result = await database.query({
-    text: `DELETE FROM "PapelC1" WHERE id = $1 RETURNING *`,
+    text: `DELETE FROM "PapelC" WHERE id = $1 RETURNING *`,
     values: [ids],
   });
   return result.rows;
@@ -751,9 +774,9 @@ async function deleteOficina(ids) {
   return result.rows;
 }
 
-export async function deleteR1(ids) {
+export async function deleteR(ids) {
   const result = await database.query({
-    text: `DELETE FROM "R1BSA" WHERE id = ANY($1) RETURNING *`,
+    text: `DELETE FROM "RBSA" WHERE id = ANY($1) RETURNING *`,
     values: [ids],
   });
   return result.rows;
@@ -776,50 +799,50 @@ export async function deleteDeve(codigo) {
 }
 
 const ordem = {
-  createM1,
+  createM,
   createPessoal,
   createOficina,
-  createR1BSA,
+  createRBSA,
   createDevo,
   createDeve,
-  createC1,
-  createPapelC1,
+  createC,
+  createPapelC,
   getPessoal,
   getOficina,
-  getC1,
-  getC1Data,
-  getPapelC1,
+  getC,
+  getCData,
+  getPapelC,
   getPapelData,
   getConfig,
-  getR1BSA,
-  getR1JustBSA,
-  getM1TableAltSis,
-  getM1TableBase,
+  getRBSA,
+  getRJustBSA,
+  getMTableAltSis,
+  getMTableBase,
   getVerificador,
   getDeve,
   getDeveJustValor,
   getDevo,
   getDevoJustValor,
-  deleteC1,
-  deletePapelC1,
+  deleteC,
+  deletePapelC,
   deletePessoal,
   deleteOficina,
-  deleteM1,
-  deleteR1,
+  deleteM,
+  deleteR,
   deleteDeve,
   deleteDevo,
   updateDeve,
   updateConfig,
-  updateC1,
-  updateC1BSA,
+  updateC,
+  updateCBSA,
   updatePessoal,
   updateOficina,
-  updatePapelC1,
+  updatePapelC,
   updateAltSis,
-  updateAltSisR1,
-  updateR1Calculadora,
+  updateAltSisR,
+  updateRCalculadora,
   updateBase,
-  updateR1Button,
+  updateRButton,
 };
 
 export default ordem;

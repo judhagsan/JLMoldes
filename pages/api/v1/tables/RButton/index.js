@@ -10,6 +10,6 @@ export default router.handler(controller.errorHandlers);
 
 async function updateHandler(request, response) {
   const updatedData = request.body;
-  const result = await ordem.updateR1Button(updatedData);
+  const result = await ordem.updateRButton(updatedData);
   return response.status(200).json(result);
 }

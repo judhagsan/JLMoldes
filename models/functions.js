@@ -1,9 +1,9 @@
-const sendTrueMR1 = async (id) => {
+const sendTrueMR = async (id, r) => {
   try {
-    const response = await fetch("/api/v1/tables/R1Button", {
+    const response = await fetch("/api/v1/tables/RButton", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, r1: true }),
+      body: JSON.stringify({ id, [`r${r}`]: true }),
     });
 
     if (!response.ok) throw new Error("Erro ao atualizar");
@@ -13,9 +13,9 @@ const sendTrueMR1 = async (id) => {
   }
 };
 
-async function sendToR1(itemData) {
+async function sendToR(itemData) {
   try {
-    const idExists = await receiveFromR1(itemData.id);
+    const idExists = await receiveFromR(itemData.r);
     const itemDataNumber = Number(itemData.id);
     const idExistsNumber = idExists.some(
       (item) => Number(item.id) === itemDataNumber,
@@ -25,14 +25,15 @@ async function sendToR1(itemData) {
     console.log("Verificando IDs...");
 
     if (idExistsNumber) {
-      throw new Error("R1ID"); // Erro específico para ID duplicado
+      throw new Error("RID"); // Erro específico para ID duplicado
     }
 
-    const response = await fetch("/api/v1/tables/R1", {
+    const response = await fetch("/api/v1/tables/R", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: itemData.id,
+        r: itemData.r,
         codigo: itemData.codigo,
         nome: itemData.nome,
         sis: itemData.sis ?? 0,
@@ -201,9 +202,9 @@ async function sendToOficina(
   }
 }
 
-async function sendToC1(itemData) {
+async function sendToC(itemData) {
   try {
-    const response = await fetch("/api/v1/tables/c1", {
+    const response = await fetch("/api/v1/tables/c", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -220,19 +221,19 @@ async function sendToC1(itemData) {
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || "Erro ao criar registro em C1");
+      throw new Error(errorData.error || "Erro ao criar registro em C");
     }
 
     return await response.json();
   } catch (error) {
-    console.error("Erro no createC1:", error);
+    console.error("Erro no createC:", error);
     throw error;
   }
 }
 
-async function sendToPapelC1(itemData) {
+async function sendToPapelC(itemData) {
   try {
-    const response = await fetch("/api/v1/tables/c1/papel", {
+    const response = await fetch("/api/v1/tables/c/papel", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -254,17 +255,17 @@ async function sendToPapelC1(itemData) {
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || "Erro ao criar registro em C1");
+      throw new Error(errorData.error || "Erro ao criar registro em C");
     }
 
     return await response.json();
   } catch (error) {
-    console.error("Erro no createPapelC1:", error);
+    console.error("Erro no createPapelC:", error);
     throw error;
   }
 }
 
-async function receiveFromR1DeveDevo(tableName) {
+async function receiveFromRDeveDevo(tableName) {
   try {
     const response = await fetch(`/api/v1/tables/${tableName}`);
     if (!response.ok) return [];
@@ -278,14 +279,14 @@ async function receiveFromR1DeveDevo(tableName) {
   }
 }
 
-async function receiveFromR1() {
+async function receiveFromR(r) {
   try {
-    const response = await fetch("/api/v1/tables/R1");
+    const response = await fetch(`/api/v1/tables/R?r=${r}`);
     if (!response.ok) throw new Error("Erro ao carregar os dados");
     const data = await response.json();
     return Array.isArray(data.rows) ? data.rows : [];
   } catch (error) {
-    console.error("Erro ao buscar dados R1:", error);
+    console.error("Erro ao buscar dados R:", error);
     return [];
   }
 }
@@ -380,9 +381,9 @@ async function receiveFromDevo() {
   }
 }
 
-async function receiveFromC1() {
+async function receiveFromC() {
   try {
-    const response = await fetch("/api/v1/tables/c1");
+    const response = await fetch("/api/v1/tables/c");
     if (!response.ok) throw new Error("Erro ao carregar os dados");
     const data = await response.json();
     return Array.isArray(data.rows) ? data.rows : [];
@@ -392,12 +393,12 @@ async function receiveFromC1() {
   }
 }
 
-async function receiveFromC1Data(codigo, data) {
+async function receiveFromCData(codigo, data) {
   try {
     const encodedData = encodeURIComponent(JSON.stringify(data));
 
     const response = await fetch(
-      `/api/v1/tables/c1/calculadora?codigo=${codigo}&data=${encodedData}`,
+      `/api/v1/tables/c/calculadora?codigo=${codigo}&data=${encodedData}`,
     );
 
     if (!response.ok) throw new Error("Erro ao carregar os dados");
@@ -410,12 +411,12 @@ async function receiveFromC1Data(codigo, data) {
   }
 }
 
-async function receiveFromPapelC1Data(codigo, data) {
+async function receiveFromPapelCData(codigo, data) {
   try {
     const encodedData = encodeURIComponent(JSON.stringify(data));
 
     const response = await fetch(
-      `/api/v1/tables/c1/papel/calculadora?codigo=${codigo}&data=${encodedData}`,
+      `/api/v1/tables/c/papel/calculadora?codigo=${codigo}&data=${encodedData}`,
     );
 
     if (!response.ok) throw new Error("Erro ao carregar os dados");
@@ -428,9 +429,9 @@ async function receiveFromPapelC1Data(codigo, data) {
   }
 }
 
-async function receiveFromPapelC1() {
+async function receiveFromPapelC() {
   try {
-    const response = await fetch("/api/v1/tables/c1/papel");
+    const response = await fetch("/api/v1/tables/c/papel");
     if (!response.ok) throw new Error("Erro ao carregar os dados");
     const data = await response.json();
     return Array.isArray(data.rows) ? data.rows : [];
@@ -440,7 +441,7 @@ async function receiveFromPapelC1() {
   }
 }
 
-async function receiveFromR1JustBSA(codigo) {
+async function receiveFromRJustBSA(codigo) {
   try {
     const response = await fetch(`/api/v1/tables/calculadora?codigo=${codigo}`);
 
@@ -460,7 +461,7 @@ async function receiveFromR1JustBSA(codigo) {
       }
     );
   } catch (error) {
-    console.error("Erro ao buscar dados R1:", error);
+    console.error("Erro ao buscar dados R:", error);
     return {
       total_base: 0,
       total_sis: 0,
@@ -505,14 +506,14 @@ async function receiveFromOficina(letras) {
   }
 }
 
-async function removeM1andR1(id) {
+async function removeMandR(id) {
   const response = await fetch("/api/v1/tables", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id }), // Envia o `id` no corpo da requisição
   });
 
-  const response2 = await fetch("/api/v1/tables/R1", {
+  const response2 = await fetch("/api/v1/tables/R", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id }), // Envia o `id` no corpo da requisição
@@ -525,8 +526,8 @@ async function removeM1andR1(id) {
   console.log(result2);
 }
 
-async function removeC1(id) {
-  const response = await fetch("/api/v1/tables/c1", {
+async function removeC(id) {
+  const response = await fetch("/api/v1/tables/c", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id }), // Envia o `id` no corpo da requisição
@@ -536,8 +537,8 @@ async function removeC1(id) {
   console.log(result);
 }
 
-async function removePapelC1(id) {
-  const response = await fetch("/api/v1/tables/c1/papel", {
+async function removePapelC(id) {
+  const response = await fetch("/api/v1/tables/c/papel", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id }), // Envia o `id` no corpo da requisição
@@ -591,34 +592,34 @@ async function removeDevo(codigo) {
 }
 
 const execute = {
-  sendTrueMR1,
-  sendToR1,
+  sendTrueMR,
+  sendToR,
   sendToDeve,
   sendToDeveUpdate,
   sendToDevo,
-  sendToC1,
+  sendToC,
   sendToPessoal,
   sendToOficina,
-  sendToPapelC1,
-  receiveFromC1,
+  sendToPapelC,
+  receiveFromC,
   receiveFromPessoal,
   receiveFromOficina,
-  receiveFromC1Data,
+  receiveFromCData,
   receiveFromConfig,
-  receiveFromPapelC1,
-  receiveFromPapelC1Data,
-  receiveFromR1DeveDevo,
+  receiveFromPapelC,
+  receiveFromPapelCData,
+  receiveFromRDeveDevo,
   receiveFromDeve,
   receiveFromDeveJustValor,
   receiveFromDevo,
   receiveFromDevoJustValor,
-  receiveFromR1,
-  receiveFromR1JustBSA,
-  removeC1,
-  removePapelC1,
+  receiveFromR,
+  receiveFromRJustBSA,
+  removeC,
+  removePapelC,
   removePessoal,
   removeOficina,
-  removeM1andR1,
+  removeMandR,
   removeDeve,
   removeDevo,
 };

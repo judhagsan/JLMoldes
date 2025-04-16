@@ -1,26 +1,51 @@
 import Update from "pages/components/Update.js";
 import React from "react";
 
-const NavBar = ({ R1, MContent, Cadastro, Ccontent, Gastos }) => {
+const NavBar = ({ Rcontent, MContent, Cadastro, Ccontent, Gastos }) => {
   const isMContentAvailable = Boolean(MContent);
   const isCadastroAvailable = Boolean(Cadastro);
-  const isR1Available = Boolean(R1);
+  const isR1Available = Boolean(Rcontent);
   const isGastosAvailable = Boolean(Gastos);
   // Grupos de tabs para organização
   const tabGroups = [
     {
       label: "R1",
-      content: isR1Available ? <R1 /> : "Loading...",
+      content: isR1Available ? <Rcontent r={1} /> : "Loading...",
     },
-    { label: "R2", content: "Tab content 2" },
-    { label: "R3", content: "Tab content 3" },
+    {
+      label: "R2",
+      content: isR1Available ? <Rcontent r={2} /> : "Loading...",
+    },
+    {
+      label: "R3",
+      content: isR1Available ? <Rcontent r={3} /> : "Loading...",
+    },
+
     {
       label: "M1",
-      content: isMContentAvailable ? <MContent /> : "Loading...",
+      content: isMContentAvailable ? (
+        <MContent oficina="m1" r={1} />
+      ) : (
+        "Loading..."
+      ),
       checked: true,
     },
-    { label: "M2", content: "Tab content 2" },
-    { label: "M3", content: "Tab content 3" },
+    {
+      label: "M2",
+      content: isMContentAvailable ? (
+        <MContent oficina="m2" r={2} />
+      ) : (
+        "Loading..."
+      ),
+    },
+    {
+      label: "M3",
+      content: isMContentAvailable ? (
+        <MContent oficina="m3" r={3} />
+      ) : (
+        "Loading..."
+      ),
+    },
     { label: "C1", content: isMContentAvailable ? <Ccontent /> : "Loading..." },
     { label: "C2", content: "Tab content 3" },
     { label: "C3", content: "Tab content 3" },

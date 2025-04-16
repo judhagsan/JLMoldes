@@ -4,11 +4,11 @@ import ordem from "models/tables.js";
 
 const router = createRouter();
 
-router.get(getHandlerDevoJustValor);
+router.get(getHandler);
 
 export default router.handler(controller.errorHandlers);
 
-async function getHandlerDevoJustValor(request, response) {
+async function getHandler(request, response) {
   const { codigo } = request.query;
   try {
     const valores = await ordem.getDevoJustValor(codigo);

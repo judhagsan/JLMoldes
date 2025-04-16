@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Use from "models/utils.js";
 
 const Calculadora = ({ codigo, nome, onCodigoChange, onNomeChange, data }) => {
-  const ErrorComponent = dynamic(() => import("./Errors.js"), { ssr: false });
+  const ErrorComponent = dynamic(() => import("../Errors.js"), { ssr: false });
   const [showError, setShowError] = useState(false);
   useEffect(() => {
     setShowError(false); // Resetar no cliente após a montagem

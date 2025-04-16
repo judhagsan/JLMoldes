@@ -5,10 +5,10 @@ import BSTA from "./BSATable.js";
 import Deve from "./Deve.js";
 import Devo from "./Devo.js";
 
-const R1content = ({ codigoExterno }) => {
+const Rcontent = ({ codigoExterno, r }) => {
   // Referência para o valor de codigoExterno, para garantir que não altere depois de passado
   const codigoExternoRef = useRef(codigoExterno);
-  const tablesToSearch = useRef(["R1", "deve", "devo", "cadastro"]);
+  const tablesToSearch = useRef(["R", "deve", "devo", "cadastro"]);
 
   // Se o codigoExterno for passado, não alteramos o estado de codigo
   const [codigo, setCodigo] = useState(codigoExterno || "");
@@ -37,7 +37,7 @@ const R1content = ({ codigoExterno }) => {
       try {
         let foundItem = null;
         for (const table of tablesToSearch.current) {
-          const items = await Execute.receiveFromR1DeveDevo(table);
+          const items = await Execute.receiveFromRDeveDevo(table);
           foundItem = items.find((item) => item.codigo === codigo);
           if (foundItem) break;
         }
@@ -76,7 +76,7 @@ const R1content = ({ codigoExterno }) => {
       try {
         let foundCodigo = "";
         for (const table of tablesToSearch.current) {
-          const items = await Execute.receiveFromR1DeveDevo(table);
+          const items = await Execute.receiveFromRDeveDevo(table);
           const foundItem = items.find((item) => item.nome === nome);
           if (foundItem) {
             foundCodigo = foundItem.codigo;
@@ -110,7 +110,7 @@ const R1content = ({ codigoExterno }) => {
     <div>
       <div className="grid grid-cols-4 gap-4">
         <div>
-          <BSTA codigo={codigo} />
+          <BSTA codigo={codigo} r={r} />
         </div>
         <div>
           <Deve codigo={codigo} />
@@ -130,4 +130,4 @@ const R1content = ({ codigoExterno }) => {
   );
 };
 
-export default R1content;
+export default Rcontent;

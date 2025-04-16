@@ -1,7 +1,8 @@
 exports.up = (pgm) => {
-  pgm.createTable("m1table", {
+  pgm.createTable("Mtable", {
     id: { type: "serial", primaryKey: true },
     data: { type: "timestamptz", default: pgm.func("now()"), notNull: true },
+    oficina: { type: "text", notNull: true },
     observacao: { type: "text", notNull: true },
     codigo: { type: "text", notNull: true },
     dec: { type: "text", notNull: true },
