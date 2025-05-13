@@ -6,8 +6,10 @@ import Rcontent from "../R/RContent.js";
 import Config from "../Config.js";
 import Notes from "./Notes.js";
 import Alerta from "./Alertas.js";
+import { useWebSocket } from "../../../contexts/WebSocketContext.js";
 
 const Mcontent = ({ oficina, r }) => {
+  const [cadastroItems, setCadastroItems] = useState([]);
   const [observacao, setObservacao] = useState("");
   const [dec, setDec] = useState("");
   const [codigo, setCodigo] = useState("");
@@ -17,68 +19,83 @@ const Mcontent = ({ oficina, r }) => {
   const [alt, setAlt] = useState("");
   const [showError, setErrorCode] = useState(false);
 
-  // Busca a observação correspondente ao código digitado
+  const { lastMessage } = useWebSocket();
+
   useEffect(() => {
-    const fetchDados = async () => {
+    const fetchInitialCadastroData = async () => {
+      try {
+        const response = await fetch("/api/v1/tables/cadastro");
+        if (!response.ok)
+          throw new Error("Erro ao buscar dados iniciais de cadastro");
+        const data = await response.json();
+        setCadastroItems(Array.isArray(data.rows) ? data.rows : []);
+      } catch (error) {
+        console.error("Erro ao buscar dados iniciais de cadastro:", error);
+        setCadastroItems([]);
+      }
+    };
+    fetchInitialCadastroData();
+  }, []);
+
+  useEffect(() => {
+    if (lastMessage && lastMessage.data) {
+      const { type, payload } = lastMessage.data;
+
+      if (type === "CADASTRO_NEW_ITEM" && payload) {
+        setCadastroItems((prevItems) => {
+          if (prevItems.find((item) => item.id === payload.id)) {
+            return prevItems.map((item) =>
+              item.id === payload.id ? payload : item,
+            );
+          }
+          return [...prevItems, payload];
+        });
+      } else if (type === "CADASTRO_UPDATED_ITEM" && payload) {
+        setCadastroItems((prevItems) =>
+          prevItems.map((item) =>
+            item.id === payload.id ? { ...item, ...payload } : item,
+          ),
+        );
+      } else if (type === "CADASTRO_DELETED_ITEM" && payload && payload.id) {
+        setCadastroItems((prevItems) =>
+          prevItems.filter((item) => item.id !== payload.id),
+        );
+      }
+    }
+  }, [lastMessage]);
+
+  useEffect(() => {
+    if (!codigo) {
+      setObservacao("");
+      setNome("");
+      return;
+    }
+    const registroEncontrado = cadastroItems.find(
+      (item) => item.codigo === codigo,
+    );
+    if (registroEncontrado) {
+      setObservacao(registroEncontrado.observacao || "");
+      setNome(registroEncontrado.nome || "");
+    } else {
+      setObservacao("");
+      setNome("");
+    }
+  }, [codigo, cadastroItems]);
+
+  useEffect(() => {
+    if (!nome) {
       if (!codigo) {
         setObservacao("");
-        setNome("");
-        return;
-      }
-
-      try {
-        const response = await fetch("/api/v1/tables/cadastro");
-        if (!response.ok) throw new Error("Erro ao buscar dados");
-
-        const data = await response.json();
-        const registroEncontrado = data.rows.find(
-          (item) => item.codigo === codigo,
-        );
-
-        if (registroEncontrado) {
-          setObservacao(registroEncontrado.observacao || "");
-          setNome(registroEncontrado.nome || "");
-        } else {
-          setObservacao("");
-          setNome("");
-        }
-      } catch (error) {
-        console.error("Erro ao buscar dados:", error);
-      }
-    };
-
-    fetchDados();
-  }, [codigo]);
-
-  useEffect(() => {
-    const fetchDados = async () => {
-      if (!nome) {
-        setObservacao("");
         setCodigo("");
-        return;
       }
-
-      try {
-        const response = await fetch("/api/v1/tables/cadastro");
-        if (!response.ok) throw new Error("Erro ao buscar dados");
-
-        const data = await response.json();
-        const registroEncontrado = data.rows.find((item) => item.nome === nome);
-
-        if (registroEncontrado) {
-          setObservacao(registroEncontrado.observacao || "");
-          setCodigo(registroEncontrado.codigo || "");
-        } else {
-          setObservacao("");
-          setCodigo("");
-        }
-      } catch (error) {
-        console.error("Erro ao buscar dados:", error);
-      }
-    };
-
-    fetchDados();
-  }, [nome]);
+      return;
+    }
+    const registroEncontrado = cadastroItems.find((item) => item.nome === nome);
+    if (registroEncontrado) {
+      setObservacao(registroEncontrado.observacao || "");
+      setCodigo(registroEncontrado.codigo || "");
+    }
+  }, [nome, cadastroItems, codigo]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -95,7 +112,7 @@ const Mcontent = ({ oficina, r }) => {
     };
 
     // Condição para separar os dados em duas tabelas
-    let hasInserted = false; // Flag para evitar inserções duplicadas
+    let hasInserted = false;
 
     // Se todos os valores forem 0, exibe o erro e interrompe a execução
     if (parseInt(base) === 0 && parseInt(sis) === 0 && parseInt(alt) === 0) {

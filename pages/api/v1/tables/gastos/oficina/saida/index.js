@@ -11,30 +11,82 @@ router.put(updateHandler);
 
 export default router.handler(controller.errorHandlers);
 
-async function postHandler(request, response) {
-  const ordemInputValues = request.body;
-  const newMOrdem = await ordem.createSaidaO(ordemInputValues);
-  return response.status(201).json(newMOrdem);
-}
+async function notifyWebSocketServer(data) {
+  const wsHttpPort = parseInt(process.env.WS_PORT || "8080") + 1;
+  const wsNotifyUrl = `http://localhost:${wsHttpPort}/broadcast`;
 
-async function getHandler(request, response) {
-  const { letras } = request.query;
   try {
-    const valores = await ordem.getSaidaO(letras);
-    response.status(200).json({ rows: valores });
+    const response = await fetch(wsNotifyUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error(`Erro WebSocket (${response.status}): ${errorData}`);
+    } else {
+      console.log("Notificação WebSocket enviada:", data);
+    }
   } catch (error) {
-    response.status(500).json({ error: error.message });
+    console.error("Erro ao notificar WebSocket:", error);
   }
 }
 
-async function deleteHandler(request, response) {
-  const { id } = request.body;
-  const result = await ordem.deleteSaidaO(id);
-  return response.status(200).json(result);
+async function postHandler(req, res) {
+  const input = req.body;
+  const result = await ordem.createSaidaO(input);
+
+  if (result?.rows?.length > 0) {
+    const newItem = result.rows[0];
+    await notifyWebSocketServer({
+      type: "SAIDAS_OFICINA_NEW_ITEM",
+      payload: newItem,
+    });
+    return res.status(201).json(newItem);
+  }
+
+  res.status(400).json({ error: "Falha ao criar item" });
 }
 
-async function updateHandler(request, response) {
-  const updatedData = request.body;
-  const result = await ordem.updateSaidaO(updatedData);
-  return response.status(200).json(result);
+async function getHandler(req, res) {
+  const { letras } = req.query;
+  try {
+    const rows = await ordem.getSaidaO(letras);
+    res.status(200).json({ rows });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function deleteHandler(req, res) {
+  const { id } = req.body;
+  const result = await ordem.deleteSaidaO(id);
+
+  if (result?.rows?.length > 0) {
+    const deleted = result.rows[0];
+    await notifyWebSocketServer({
+      type: "SAIDAS_OFICINA_DELETED_ITEM",
+      payload: deleted,
+    });
+    return res.status(200).json(deleted);
+  }
+
+  res.status(400).json({ error: "Falha ao DELETAR" });
+}
+
+async function updateHandler(req, res) {
+  const input = req.body;
+  const result = await ordem.updateSaidaO(input);
+
+  if (result?.rows?.length > 0) {
+    const updated = result.rows[0];
+    await notifyWebSocketServer({
+      type: "SAIDAS_OFICINA_UPDATED_ITEM",
+      payload: updated,
+    });
+    return res.status(200).json(updated);
+  }
+
+  res.status(400).json({ error: "Falha ao atualizar" });
 }

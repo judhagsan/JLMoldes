@@ -7,6 +7,7 @@ import {
 } from "@primer/octicons-react";
 
 import Execute from "models/functions.js";
+import { useWebSocket } from "../../../contexts/WebSocketContext.js";
 
 const EditorNotes = ({ r, colum }) => {
   const [notes, setNotes] = useState([]);
@@ -19,6 +20,7 @@ const EditorNotes = ({ r, colum }) => {
   const editorRef = useRef(null);
   const savedSelection = useRef(null);
 
+  const { lastMessage } = useWebSocket(); // Usar o hook WebSocket
   const colors = [
     { icon: <SquareFillIcon size={24} />, value: "#FF0000" },
     { icon: <SquareFillIcon size={24} />, value: "#0000FF" },
@@ -60,19 +62,53 @@ const EditorNotes = ({ r, colum }) => {
       document.removeEventListener("selectionchange", handleSelectionChange);
   }, []);
 
-  // Busca as notas quando 'r' muda
+  // Busca as notas iniciais quando 'r' ou 'colum' mudam
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchInitialNotes = async () => {
+      if (!r || !colum) {
+        setNotes([]);
+        return;
+      }
       try {
         const res = await Execute.receiveFromNota(r, colum);
         setNotes(res.map((row) => ({ id: row.id, html: row.texto })));
       } catch (err) {
         console.error("Erro ao carregar notas:", err);
+        setNotes([]);
       }
     };
-    const intervalId = setInterval(fetchData, 5000); // Atualiza a cada 5 segundos
-    return () => clearInterval(intervalId);
+    fetchInitialNotes();
+    // O polling com setInterval foi removido
   }, [r, colum]);
+
+  // Efeito para lidar com mensagens WebSocket
+  useEffect(() => {
+    if (lastMessage && lastMessage.data) {
+      const { type, payload } = lastMessage.data;
+
+      // Verificar se a nota pertence a este editor (mesmo 'r' e 'colum')
+      if (payload && payload.r === r && payload.colum === colum) {
+        if (type === "NOTA_NEW_ITEM") {
+          setNotes((prevNotes) => {
+            // Evitar duplicatas se a nota já existir (improvável se a lógica estiver correta)
+            if (prevNotes.find((note) => note.id === payload.id))
+              return prevNotes;
+            return [...prevNotes, { id: payload.id, html: payload.texto }];
+          });
+        } else if (type === "NOTA_UPDATED_ITEM") {
+          setNotes((prevNotes) =>
+            prevNotes.map((note) =>
+              note.id === payload.id ? { ...note, html: payload.texto } : note,
+            ),
+          );
+        } else if (type === "NOTA_DELETED_ITEM") {
+          setNotes((prevNotes) =>
+            prevNotes.filter((note) => note.id !== payload.id),
+          );
+        }
+      }
+    }
+  }, [lastMessage, r, colum]);
 
   // Handlers
   const handleInput = () => setCurrentNote(editorRef.current.innerHTML);
@@ -99,7 +135,6 @@ const EditorNotes = ({ r, colum }) => {
     if (!currentNote.trim()) return;
     try {
       if (editingNoteId) {
-        // Lógica para atualizar uma nota existente (PUT)
         const response = await fetch("/api/v1/tables/nota", {
           // Substitua pela sua rota de API para atualizar notas
           method: "PUT",
@@ -116,28 +151,17 @@ const EditorNotes = ({ r, colum }) => {
           );
         }
 
-        const result = await response.json();
-        const updated = Array.isArray(result.rows) ? result.rows[0] : result;
-        setNotes((prev) =>
-          prev.map((note) =>
-            note.id === editingNoteId
-              ? { id: note.id, html: updated.texto }
-              : note,
-          ),
-        );
+        // A atualização do estado 'notes' será feita pela mensagem WebSocket 'NOTA_UPDATED_ITEM'
         setEditingNoteId(null); // Sai do modo de edição
       } else {
         const noteOBJ = { texto: currentNote, r, colum };
-
-        const newNote = await Execute.sendToNota(noteOBJ);
-        const noteObj = Array.isArray(newNote.rows)
-          ? {
-              id: newNote.rows[0].id,
-              html: newNote.rows[0].texto,
-            }
-          : { id: newNote.id, html: newNote.texto };
-        setNotes((prev) => [...prev, noteObj]);
+        // A função Execute.sendToNota fará o POST.
+        // O backend, após salvar, enviará uma mensagem WebSocket 'NOTA_NEW_ITEM'.
+        // O estado 'notes' será atualizado por essa mensagem.
+        await Execute.sendToNota(noteOBJ);
       }
+      // Limpar o editor após o envio da requisição HTTP.
+      // A atualização da lista de notas virá via WebSocket.
       editorRef.current.innerHTML = "";
       setCurrentNote("");
       setBoldActive(false);
@@ -150,8 +174,9 @@ const EditorNotes = ({ r, colum }) => {
 
   const handleDelete = async (id) => {
     try {
+      // Execute.removeNota fará a requisição DELETE.
+      // O backend, após excluir, enviará uma mensagem WebSocket 'NOTA_DELETED_ITEM'.
       await Execute.removeNota(id);
-      setNotes((prev) => prev.filter((n) => n.id !== id));
     } catch (error) {
       console.error("Erro ao excluir nota:", error);
     }

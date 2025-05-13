@@ -3,6 +3,7 @@ import EditM from "../Edit";
 import Execute from "models/functions";
 import Use from "models/utils";
 import ErrorComponent from "../Errors.js";
+import { useWebSocket } from "../../../contexts/WebSocketContext.js"; // Importar o hook
 
 const TabelaM = ({
   oficina,
@@ -19,28 +20,35 @@ const TabelaM = ({
   const [editingId, setEditingId] = useState(null);
   const [editedData, setEditedData] = useState({});
   const [showError, setErrorCode] = useState(false);
+  const { lastMessage } = useWebSocket(); // Usar o hook WebSocket
 
   const baseColumnsCount = 6; // ID + Data + Observações + CODIGO + DEC + Nome
   const colspan = baseColumnsCount + columnsConfig.length;
 
-  const fetchData = async () => {
+  const fetchData = async (currentOficina) => {
     try {
+      // Usar currentOficina que é passado para a função
       const response = await fetch(
-        `/api/v1/${mainEndpoint}?oficina=${oficina}`,
+        `/api/v1/${mainEndpoint}?oficina=${currentOficina}`,
       );
       if (!response.ok) throw new Error("Erro ao carregar os dados");
       const data = await response.json();
 
       if (Array.isArray(data.rows)) {
-        const sortedData = data.rows.sort((a, b) => {
-          if (a.dec !== b.dec) return a.dec.localeCompare(b.dec);
-          return new Date(a.data) - new Date(b.data);
-        });
-        setDados(sortedData);
+        setDados(sortData(data.rows));
       }
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
+      setDados([]);
     }
+  };
+
+  // Função auxiliar para ordenar os dados
+  const sortData = (dataArray) => {
+    return [...dataArray].sort((a, b) => {
+      if (a.dec !== b.dec) return a.dec.localeCompare(b.dec);
+      return new Date(a.data) - new Date(b.data);
+    });
   };
 
   const handleSave = async (editedData) => {
@@ -59,11 +67,7 @@ const TabelaM = ({
 
       if (!response.ok || !response2.ok) throw new Error("Erro ao atualizar");
 
-      setDados(
-        dados.map((item) =>
-          item.id === editedData.id ? { ...item, ...editedData } : item,
-        ),
-      );
+      // A atualização do estado 'dados' será feita pela mensagem WebSocket 'TABELAM_UPDATED_ITEM'
       setEditingId(null);
     } catch (error) {
       console.error("Erro ao salvar:", error);
@@ -80,11 +84,47 @@ const TabelaM = ({
   };
 
   useEffect(() => {
-    fetchData();
-    const intervalId = setInterval(fetchData, 5000);
-    return () => clearInterval(intervalId);
+    if (oficina) {
+      // Garante que oficina está definido antes de buscar
+      fetchData(oficina);
+    }
+    // O polling com setInterval foi removido
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [oficina, mainEndpoint]); // Adicionado mainEndpoint como dependência se puder mudar
+
+  // Efeito para lidar com mensagens WebSocket
+  useEffect(() => {
+    if (lastMessage && lastMessage.data) {
+      const { type, payload } = lastMessage.data;
+
+      // Verificar se a mensagem é relevante para esta instância da tabela
+      // (mesma oficina e talvez mainEndpoint se necessário)
+      if (payload && payload.oficina === oficina) {
+        if (type === "TABELAM_NEW_ITEM") {
+          setDados((prevDados) => sortData([...prevDados, payload]));
+        } else if (type === "TABELAM_UPDATED_ITEM") {
+          setDados((prevDados) =>
+            sortData(
+              prevDados.map((item) =>
+                item.id === payload.id ? { ...item, ...payload } : item,
+              ),
+            ),
+          );
+          // Se o item que estava sendo editado foi atualizado, fechar o formulário de edição
+          if (editingId === payload.id) {
+            setEditingId(null);
+          }
+        } else if (type === "TABELAM_DELETED_ITEM") {
+          setDados((prevDados) =>
+            sortData(prevDados.filter((item) => item.id !== payload.id)),
+          );
+          if (editingId === payload.id) {
+            setEditingId(null);
+          }
+        }
+      }
+    }
+  }, [lastMessage, oficina, editingId]);
 
   const groupedData = dados.reduce((acc, item) => {
     if (!acc[item.dec]) acc[item.dec] = [];
@@ -232,7 +272,7 @@ const TabelaM = ({
                               setErrorCode(item.id);
                             }
 
-                            fetchData();
+                            // fetchData(); // Removido, atualização virá via WebSocket
                           } catch (error) {
                             setErrorCode(item.id);
                           }
@@ -267,7 +307,7 @@ const TabelaM = ({
                               setErrorCode(item.id);
                             }
 
-                            fetchData();
+                            // fetchData(); // Removido, atualização virá via WebSocket
                           } catch (error) {
                             setErrorCode(item.id);
                           }
@@ -298,7 +338,7 @@ const TabelaM = ({
                               setErrorCode(item.id);
                             }
 
-                            fetchData();
+                            // fetchData(); // Removido, atualização virá via WebSocket
                           } catch (error) {
                             setErrorCode(item.id);
                           }
@@ -335,6 +375,8 @@ const TabelaM = ({
                             pix: sis + alt + base,
                           });
                           Execute.removeMandR(item.id);
+                          // A remoção acima (removeMandR) deve fazer o backend
+                          // enviar uma mensagem TABELAM_DELETED_ITEM
                         }}
                       >
                         Pagar
@@ -344,6 +386,8 @@ const TabelaM = ({
                           editingId === item.id ? "hidden" : ""
                         }`}
                         onClick={() => Execute.removeMandR(item.id)}
+                        // A remoção acima (removeMandR) deve fazer o backend
+                        // enviar uma mensagem TABELAM_DELETED_ITEM
                       >
                         Excluir
                       </button>

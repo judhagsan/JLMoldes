@@ -1,4 +1,3 @@
-// Em /home/judhagsan/JLMoldes/models/functions.js
 const sendTrueMR = async (id, r) => {
   try {
     const response = await fetch("/api/v1/tables/RButton", {

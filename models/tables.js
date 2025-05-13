@@ -1001,7 +1001,7 @@ async function deleteSaidaP(ids) {
     text: `DELETE FROM "SaidaP" WHERE id = $1 RETURNING *`,
     values: [ids],
   });
-  return result.rows;
+  return result;
 }
 
 async function deleteSaidaO(ids) {
@@ -1009,7 +1009,7 @@ async function deleteSaidaO(ids) {
     text: `DELETE FROM "SaidaO" WHERE id = $1 RETURNING *`,
     values: [ids],
   });
-  return result.rows;
+  return result;
 }
 
 async function deleteOficina(ids) {

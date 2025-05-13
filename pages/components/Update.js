@@ -1,27 +1,39 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
+import { useWebSocket } from "../../contexts/WebSocketContext";
+import {
+  CheckCircleFillIcon,
+  XCircleFillIcon,
+  BroadcastIcon,
+} from "@primer/octicons-react";
 
 const Update = () => {
-  const [seconds, setSeconds] = useState(1);
+  const { isConnected, socket } = useWebSocket();
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSeconds((prev) => (prev >= 5 ? 1 : prev + 1));
-    }, 1000); // 1 segundo por incremento
+  let statusIndicator;
+  let statusText = "Desconectado";
+  let statusColor = "text-error"; // Cor padrão para desconectado
 
-    return () => clearInterval(interval);
-  }, []);
-
-  const progress = (seconds / 5) * 100; // Converte segundos em porcentagem para a barra
+  if (socket && socket.readyState === WebSocket.CONNECTING) {
+    statusIndicator = <BroadcastIcon size={16} className="animate-pulse" />;
+    statusText = "Conectando...";
+    statusColor = "text-warning";
+  } else if (isConnected && socket && socket.readyState === WebSocket.OPEN) {
+    statusIndicator = <CheckCircleFillIcon size={16} />;
+    statusText = "Tempo Real";
+    statusColor = "text-success";
+  } else {
+    // Desconectado ou erro
+    statusIndicator = <XCircleFillIcon size={16} />;
+    // statusText já é "Desconectado"
+  }
 
   return (
     <>
       <div
-        className="radial-progress text-success text-xs"
-        style={{ "--value": progress, "--size": "1.5rem" }}
-        aria-valuenow={progress}
-        role="progressbar"
+        className={`inline-flex items-center ml-2 tooltip tooltip-bottom ${statusColor}`}
+        data-tip={statusText}
       >
-        {seconds}s
+        {statusIndicator}
       </div>
     </>
   );

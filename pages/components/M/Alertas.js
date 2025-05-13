@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import Use from "models/utils.js";
 import Execute from "models/functions.js";
 import { XCircleIcon, AlertIcon } from "@primer/octicons-react";
+import { useWebSocket } from "../../../contexts/WebSocketContext.js";
 
 const Alerta = () => {
   const [data, setData] = useState([]);
@@ -21,26 +22,40 @@ const Alerta = () => {
     "L",
   ]);
 
-  const fetchData = async () => {
-    try {
-      const promises = letras.current.map(async (letra) => {
-        const items = await Execute.receiveFromPessoal(letra);
-        return items.map((item) => ({ ...item, letra })); // Adiciona a letra em cada item
-      });
-      const results = await Promise.all(promises);
-      setData(results.flat());
-    } catch (error) {
-      console.error("Erro:", error);
-    }
-  };
+  const { lastMessage } = useWebSocket(); // Use o hook
 
   useEffect(() => {
-    fetchData();
-    const intervalId = setInterval(fetchData, 5000);
-    return () => clearInterval(intervalId);
+    // Busca inicial dos dados de alertas (opcional, mas manteremos por enquanto)
+    const fetchInitialData = async () => {
+      try {
+        const promises = letras.current.map(async (letra) => {
+          const items = await Execute.receiveFromPessoal(letra);
+          return items.map((item) => ({ ...item, letra }));
+        });
+        const results = await Promise.all(promises);
+        setData(results.flat());
+      } catch (error) {
+        console.error("Erro ao buscar dados de alertas:", error);
+        setData([]);
+      }
+    };
+    fetchInitialData();
+    // O polling com setInterval foi removido
   }, []);
 
+  // Efeito para lidar com mensagens WebSocket
+  useEffect(() => {
+    if (lastMessage && lastMessage.data) {
+      const { type, payload } = lastMessage.data;
+      if (type === "ALERTAS_UPDATED" && payload) {
+        // Esperamos que o payload seja um array de alertas atualizados
+        setData(payload);
+      }
+    }
+  }, [lastMessage]);
+
   const getStatusVencimento = (entry) => {
+    // Mantém a lógica de verificação de vencimento
     const hoje = new Date();
     hoje.setUTCHours(23, 59, 59, 999);
 
@@ -61,6 +76,7 @@ const Alerta = () => {
   };
 
   return (
+    // Renderização permanece a mesma
     <>
       {data.map((entry) => {
         const status = getStatusVencimento(entry);
