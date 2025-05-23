@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import EditM from "../Edit";
 import Execute from "models/functions";
 import Use from "models/utils";
 import ErrorComponent from "../Errors.js";
+import { useWebSocket } from "../../../contexts/WebSocketContext.js"; // Importar o hook
 
 const TabelaM = ({
   oficina,
   r,
-  mainEndpoint = "tables",
-  secondaryEndpoint = "tables/R",
+  filterType, // Nova prop: 'alt_sis' ou 'base'
+  secondaryEndpoint = "tables/R", // Mantida para o segundo PUT em handleSave
   columnsConfig = [
     { field: "sis", label: "Sis", min: 1 },
     { field: "alt", label: "Alt", min: 1 },
@@ -19,33 +20,41 @@ const TabelaM = ({
   const [editingId, setEditingId] = useState(null);
   const [editedData, setEditedData] = useState({});
   const [showError, setErrorCode] = useState(false);
+  const lastProcessedTimestampRef = useRef(null); // Para evitar processamento duplicado
+  const { lastMessage } = useWebSocket(); // Usar o hook WebSocket
 
   const baseColumnsCount = 6; // ID + Data + Observações + CODIGO + DEC + Nome
   const colspan = baseColumnsCount + columnsConfig.length;
 
-  const fetchData = async () => {
+  const fetchData = async (currentOficina) => {
+    const filterParam = filterType === "base" ? "base" : "alt_sis";
+    const endpoint = `/api/v1/tables?oficina=${currentOficina}&filterType=${filterParam}`;
     try {
-      const response = await fetch(
-        `/api/v1/${mainEndpoint}?oficina=${oficina}`,
-      );
+      const response = await fetch(endpoint);
       if (!response.ok) throw new Error("Erro ao carregar os dados");
       const data = await response.json();
 
       if (Array.isArray(data.rows)) {
-        const sortedData = data.rows.sort((a, b) => {
-          if (a.dec !== b.dec) return a.dec.localeCompare(b.dec);
-          return new Date(a.data) - new Date(b.data);
-        });
-        setDados(sortedData);
+        setDados(sortData(data.rows));
       }
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
+      setDados([]);
     }
+  };
+
+  // Função auxiliar para ordenar os dados
+  const sortData = (dataArray) => {
+    return [...dataArray].sort((a, b) => {
+      if (a.dec !== b.dec) return a.dec.localeCompare(b.dec);
+      return new Date(a.data) - new Date(b.data);
+    });
   };
 
   const handleSave = async (editedData) => {
     try {
-      const response = await fetch(`/api/v1/${mainEndpoint}`, {
+      const response = await fetch(`/api/v1/tables`, {
+        // PUT para Mtable
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editedData),
@@ -59,12 +68,7 @@ const TabelaM = ({
 
       if (!response.ok || !response2.ok) throw new Error("Erro ao atualizar");
 
-      setDados(
-        dados.map((item) =>
-          item.id === editedData.id ? { ...item, ...editedData } : item,
-        ),
-      );
-      setEditingId(null);
+      // A atualização do estado 'dados' e o fechamento do modo de edição serão feitos pela mensagem WebSocket
     } catch (error) {
       console.error("Erro ao salvar:", error);
     }
@@ -80,11 +84,102 @@ const TabelaM = ({
   };
 
   useEffect(() => {
-    fetchData();
-    const intervalId = setInterval(fetchData, 5000);
-    return () => clearInterval(intervalId);
+    if (oficina) {
+      // Garante que oficina está definido antes de buscar
+      fetchData(oficina);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [oficina, filterType]); // Depende de oficina e filterType
+
+  // Efeito para lidar com mensagens WebSocket
+  useEffect(() => {
+    if (lastMessage && lastMessage.data && lastMessage.timestamp) {
+      if (
+        lastProcessedTimestampRef.current &&
+        lastMessage.timestamp <= lastProcessedTimestampRef.current
+      ) {
+        // console.log("TabelaM.js: Ignorando mensagem WebSocket já processada:", lastMessage.timestamp);
+        return;
+      }
+
+      const { type, payload } = lastMessage.data;
+      // console.log("TabelaM.js: Mensagem WebSocket recebida:", type, payload, "Oficina atual:", oficina, "Timestamp:", lastMessage.timestamp);
+
+      // Verificar se a mensagem é relevante para esta instância da tabela
+      // (mesma oficina e talvez mainEndpoint se necessário)
+      if (payload && payload.oficina === oficina) {
+        // Garante que a mensagem é para a oficina correta
+        const itemMatchesFilter = filterCondition(payload);
+
+        switch (type) {
+          case "TABELAM_NEW_ITEM":
+            if (itemMatchesFilter) {
+              setDados((prevDados) => {
+                if (prevDados.find((item) => item.id === payload.id)) {
+                  // Se já existe (improvável para NEW_ITEM, mas seguro), atualiza
+                  return sortData(
+                    prevDados.map((item) =>
+                      item.id === payload.id ? payload : item,
+                    ),
+                  );
+                }
+                return sortData([...prevDados, payload]);
+              });
+            }
+            break;
+          case "TABELAM_UPDATED_ITEM":
+            setDados((prevDados) => {
+              const itemExistsInState = prevDados.some(
+                (item) => item.id === payload.id,
+              );
+              if (itemMatchesFilter) {
+                // Item deve estar na lista
+                if (itemExistsInState) {
+                  // Atualiza
+                  return sortData(
+                    prevDados.map((item) =>
+                      item.id === payload.id ? { ...item, ...payload } : item,
+                    ),
+                  );
+                } else {
+                  // Adiciona (item não estava mas agora corresponde ao filtro)
+                  return sortData([...prevDados, payload]);
+                }
+              } else {
+                // Item NÃO deve estar na lista
+                if (itemExistsInState) {
+                  // Remove (item estava mas não corresponde mais ao filtro)
+                  return sortData(
+                    prevDados.filter((item) => item.id !== payload.id),
+                  );
+                }
+                // Se não estava e não corresponde, não faz nada
+                return prevDados;
+              }
+            });
+            if (editingId === payload.id && !itemMatchesFilter) {
+              setEditingId(null); // Fecha edição se o item editado não pertence mais a esta tabela
+            } else if (editingId === payload.id) {
+              setEditingId(null); // Fecha edição por segurança após qualquer atualização do item editado
+            }
+            break;
+          case "TABELAM_DELETED_ITEM":
+            // payload para delete deve ser algo como { id: 'uuid', oficina: 'nomeOficina' }
+            setDados((prevDados) =>
+              sortData(prevDados.filter((item) => item.id !== payload.id)),
+            ); // Remove da lista se existir
+            if (editingId === payload.id) {
+              setEditingId(null); // Fecha o modo de edição se o item editado foi deletado
+            }
+            break;
+          default:
+            // console.log("TabelaM.js: Tipo de mensagem WebSocket não tratada ou não relevante:", type);
+            break;
+        }
+      }
+      lastProcessedTimestampRef.current = lastMessage.timestamp;
+    } // filterCondition é uma função, se ela mudar, o efeito deve reavaliar.
+  }, [lastMessage, oficina, editingId, filterCondition]);
 
   const groupedData = dados.reduce((acc, item) => {
     if (!acc[item.dec]) acc[item.dec] = [];
@@ -231,8 +326,7 @@ const TabelaM = ({
                             } else {
                               setErrorCode(item.id);
                             }
-
-                            fetchData();
+                            // A atualização da UI virá via WebSocket
                           } catch (error) {
                             setErrorCode(item.id);
                           }
@@ -266,8 +360,7 @@ const TabelaM = ({
                             } else {
                               setErrorCode(item.id);
                             }
-
-                            fetchData();
+                            // A atualização da UI virá via WebSocket
                           } catch (error) {
                             setErrorCode(item.id);
                           }
@@ -297,8 +390,7 @@ const TabelaM = ({
                             } else {
                               setErrorCode(item.id);
                             }
-
-                            fetchData();
+                            // A atualização da UI virá via WebSocket
                           } catch (error) {
                             setErrorCode(item.id);
                           }
@@ -335,6 +427,8 @@ const TabelaM = ({
                             pix: sis + alt + base,
                           });
                           Execute.removeMandR(item.id);
+                          // A remoção acima (removeMandR) deve fazer o backend
+                          // enviar uma mensagem TABELAM_DELETED_ITEM
                         }}
                       >
                         Pagar
@@ -344,6 +438,8 @@ const TabelaM = ({
                           editingId === item.id ? "hidden" : ""
                         }`}
                         onClick={() => Execute.removeMandR(item.id)}
+                        // A remoção acima (removeMandR) deve fazer o backend
+                        // enviar uma mensagem TABELAM_DELETED_ITEM
                       >
                         Excluir
                       </button>

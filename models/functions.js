@@ -1,4 +1,3 @@
-// Em /home/judhagsan/JLMoldes/models/functions.js
 const sendTrueMR = async (id, r) => {
   try {
     const response = await fetch("/api/v1/tables/RButton", {
@@ -79,9 +78,12 @@ async function sendToDeve(itemData) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         nome: itemData.nome,
+        deveid: itemData.deveid,
         data: itemData.data,
         codigo: itemData.codigo,
         r: itemData.r,
+        valorpapel: itemData.valorpapel,
+        valorcomissao: itemData.valorcomissao,
         valor: itemData.valor,
       }),
     });
@@ -98,20 +100,20 @@ async function sendToDeve(itemData) {
   }
 }
 
-async function sendToDeveUpdate(codigo, valor, r) {
+async function sendToDeveUpdate(codigo, valor, r, deveIdsArray, pix, real) {
   try {
-    const response = await fetch(
-      `/api/v1/tables/deve?codigo=${codigo}&valor=${valor}&r=${r}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          codigo,
-          valor,
-          r,
-        }),
-      },
-    );
+    const response = await fetch(`/api/v1/tables/deve`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        codigo,
+        valor,
+        r,
+        deveIdsArray,
+        pix,
+        real,
+      }),
+    });
 
     if (!response.ok) throw new Error("Erro ao atualizar");
   } catch (error) {
@@ -345,6 +347,7 @@ async function sendToPapelC(itemData) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         codigo: itemData.codigo,
+        deveid: itemData.deveid,
         r: itemData.r,
         data: itemData.data,
         nome: itemData.nome,
@@ -358,6 +361,7 @@ async function sendToPapelC(itemData) {
         util: itemData.util,
         perdida: itemData.perdida,
         comentarios: itemData.comentario,
+        comissao: itemData.comissao,
       }),
     });
 
@@ -423,10 +427,10 @@ async function receiveFromDeve(r) {
   }
 }
 
-async function receiveFromDeveJustValor(codigo) {
+async function receiveFromDeveJustValor(codigo, r) {
   try {
     const response = await fetch(
-      `/api/v1/tables/calculadora/deve?codigo=${codigo}`,
+      `/api/v1/tables/calculadora/deve?codigo=${codigo}&r=${r}`,
     );
 
     if (!response.ok) {

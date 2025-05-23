@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import Execute from "models/functions";
 import Edit from "../Edit";
 import Use from "models/utils";
+import { useWebSocket } from "../../../contexts/WebSocketContext.js";
 
 const formatCurrency = (value) => {
   const number = Number(value);
@@ -12,27 +13,70 @@ const SaidasPessoal = ({ letras }) => {
   const [dados, setDados] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editedData, setEditedData] = useState({});
+  const { lastMessage } = useWebSocket();
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!letras) return;
       try {
         const results = await Execute.receiveFromSaidaP(letras);
-
-        // Ordenar resultados pela data mais recente primeiro
-        const sortedResults =
-          results?.sort((a, b) => new Date(b.pago) - new Date(a.pago)) || [];
-
+        const sortedResults = Array.isArray(results)
+          ? results.sort((a, b) => new Date(b.pago) - new Date(a.pago))
+          : [];
         setDados(sortedResults);
       } catch (error) {
         console.error("Erro ao buscar dados:", error);
         setDados([]);
       }
     };
-
     fetchData();
-    const intervalId = setInterval(fetchData, 5000);
-    return () => clearInterval(intervalId);
   }, [letras]);
+
+  useEffect(() => {
+    if (!lastMessage?.data) return;
+
+    let parsed;
+    try {
+      parsed =
+        typeof lastMessage.data === "string"
+          ? JSON.parse(lastMessage.data)
+          : lastMessage.data;
+    } catch (e) {
+      console.error("Mensagem WebSocket inválida:", lastMessage.data);
+      return;
+    }
+
+    const { type, payload } = parsed;
+    if (!payload || payload.dec !== letras) return;
+
+    switch (type) {
+      case "SAIDAS_PESSOAL_UPDATED":
+        if (Array.isArray(payload.items)) {
+          const sorted = payload.items.sort(
+            (a, b) => new Date(b.pago) - new Date(a.pago),
+          );
+          setDados(sorted);
+        }
+        break;
+
+      case "SAIDAS_PESSOAL_NEW_ITEM":
+        setDados((prev) => [payload, ...prev]);
+        break;
+
+      case "SAIDAS_PESSOAL_DELETED_ITEM":
+        setDados((prev) => prev.filter((item) => item.id !== payload.id));
+        break;
+
+      case "SAIDAS_PESSOAL_UPDATED_ITEM":
+        setDados((prev) =>
+          prev.map((item) => (item.id === payload.id ? payload : item)),
+        );
+        break;
+
+      default:
+        break;
+    }
+  }, [lastMessage, letras]);
 
   const handleSave = async () => {
     try {
@@ -43,17 +87,9 @@ const SaidasPessoal = ({ letras }) => {
       });
 
       if (!response.ok) throw new Error("Falha ao atualizar");
-
-      // Atualiza os dados locais imediatamente
-      setDados(
-        dados.map((item) =>
-          item.id === editedData.id ? { ...item, ...editedData } : item,
-        ),
-      );
-      setEditingId(null);
+      setEditingId(null); // A resposta via WebSocket atualizará a lista
     } catch (error) {
       console.error("Erro ao salvar:", error);
-      // Adicione um estado de erro se necessário
     }
   };
 
@@ -69,7 +105,6 @@ const SaidasPessoal = ({ letras }) => {
   const handleRemove = async (id) => {
     try {
       await Execute.removeSaidaP(id);
-      setDados(dados.filter((item) => item.id !== id));
     } catch (error) {
       console.error("Erro ao remover:", error);
     }
@@ -126,9 +161,7 @@ const SaidasPessoal = ({ letras }) => {
                   isEditing={editingId === item.id}
                   onEdit={() => startEditing(item)}
                   onSave={handleSave}
-                  onCancel={() => {
-                    setEditingId(null);
-                  }}
+                  onCancel={() => setEditingId(null)}
                 />
                 <button
                   className={`btn btn-soft btn-xs btn-error ml-1 ${

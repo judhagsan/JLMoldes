@@ -67,10 +67,11 @@ async function getCad() {
 }
 
 export async function deleteCad(id) {
-  return database.query({
+  const result = await database.query({
     text: `DELETE FROM "cadastro" WHERE id = $1 RETURNING *;`,
     values: [id],
   });
+  return result.rows;
 }
 
 const ordem = {

@@ -1,20 +1,29 @@
-import React, { useEffect, useState } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import Execute from "models/functions";
 import Edit from "../Edit";
 import Use from "models/utils";
+import { useWebSocket } from "../../../contexts/WebSocketContext.js"; // Ajuste o caminho se necessário
 
 const formatCurrency = (value) => {
-  const number = Number(value);
+  const number = parseFloat(value); // Use parseFloat para números decimais
   return isNaN(number) ? "0.00" : number.toFixed(2);
 };
 
 const Coluna = ({ r }) => {
   const [dados, setDados] = useState([]);
-  const [groupedResults, setGroupedResults] = useState({});
+  // groupedResults será derivado de 'dados' usando useMemo
   const [loading, setLoading] = useState(true);
+  const [exists, setExists] = useState([]); // Dados da tabela R
   const [editingId, setEditingId] = useState(null);
   const [editedData, setEditedData] = useState({});
-  const [exists, setExists] = useState([]);
+  const { lastMessage } = useWebSocket();
+  const lastProcessedTimestampRef = useRef(null);
 
   const handleSave = async (editedData) => {
     try {
@@ -25,12 +34,8 @@ const Coluna = ({ r }) => {
       });
 
       if (!response.ok) throw new Error("Erro ao atualizar");
-      setDados(
-        dados.map((item) =>
-          item.id === editedData.id ? { ...item, ...editedData } : item,
-        ),
-      );
       setEditingId(null);
+      // A atualização do estado 'dados' virá via mensagem WebSocket (C_UPDATED_ITEM)
     } catch (error) {
       console.error("Erro ao salvar:", error);
     }
@@ -38,31 +43,15 @@ const Coluna = ({ r }) => {
 
   const fetchData = async () => {
     try {
+      if (typeof r === "undefined" || r === null) return;
       const results = await Execute.receiveFromC(r);
       const existsData = await Execute.receiveFromR(r);
-      setExists(existsData);
-
-      const grouped = results.reduce((acc, item) => {
-        // Remove a parte do horário da data
-        const rawDate = Use.formatarData(item.date);
-
-        // Formata a hora para 00:00
-        const dateObj = new Date(item.date);
-        const horas = String(dateObj.getHours()).padStart(2, "0");
-        const minutos = String(dateObj.getMinutes()).padStart(2, "0");
-        const horaFormatada = `${horas}:${minutos}`;
-
-        acc[rawDate] = acc[rawDate] || [];
-        acc[rawDate].push({
-          ...item,
-          horaSeparada: horaFormatada,
-          valor: Number(item.valor) || 0,
-          pix: Number(item.pix) || 0,
-        });
-        return acc;
-      }, {});
-
-      setGroupedResults(grouped);
+      setDados(
+        Array.isArray(results)
+          ? results.sort((a, b) => new Date(a.date) - new Date(b.date))
+          : [],
+      );
+      setExists(Array.isArray(existsData) ? existsData : []);
     } catch (error) {
       console.error("Erro:", error);
     } finally {
@@ -70,12 +59,133 @@ const Coluna = ({ r }) => {
     }
   };
 
+  const memoizedFetchData = useCallback(fetchData, [r]);
+
   useEffect(() => {
-    fetchData(); // Carrega os dados ao montar o componente
-    const intervalId = setInterval(fetchData, 5000); // Atualiza a cada 5 segundos
-    return () => clearInterval(intervalId); // Limpa o intervalo ao desmontar o componente
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    memoizedFetchData();
+  }, [memoizedFetchData]);
+
+  // Efeito para lidar com mensagens WebSocket
+  useEffect(() => {
+    if (lastMessage && lastMessage.data && lastMessage.timestamp) {
+      if (
+        lastProcessedTimestampRef.current &&
+        lastMessage.timestamp <= lastProcessedTimestampRef.current
+      ) {
+        return; // Ignora mensagem já processada
+      }
+
+      const { type, payload } = lastMessage.data;
+
+      // --- Lida com atualizações na tabela C (dados principais) ---
+      if (
+        // Condição para C_NEW_ITEM e C_UPDATED_ITEM: requer 'r' no payload
+        ((type === "C_NEW_ITEM" || type === "C_UPDATED_ITEM") &&
+          payload &&
+          String(payload.r) === String(r)) ||
+        // Condição para C_DELETED_ITEM: requer apenas 'id' no payload
+        (type === "C_DELETED_ITEM" && payload && payload.id !== undefined)
+      ) {
+        setDados((prevDadosC) => {
+          let newDadosC = [...prevDadosC];
+
+          const itemIndex =
+            payload.id !== undefined
+              ? newDadosC.findIndex(
+                  (item) => String(item.id) === String(payload.id),
+                )
+              : -1;
+
+          switch (type) {
+            case "C_NEW_ITEM":
+              if (itemIndex === -1) newDadosC.push(payload);
+              break;
+            case "C_UPDATED_ITEM":
+              if (itemIndex !== -1) {
+                newDadosC[itemIndex] = {
+                  ...newDadosC[itemIndex],
+                  ...payload,
+                };
+              } else {
+                newDadosC.push(payload); // Adiciona se não existir
+              }
+              if (editingId === payload.id) setEditingId(null); // Fecha edição
+              break;
+            case "C_DELETED_ITEM":
+              newDadosC = newDadosC.filter(
+                (item) => String(item.id) !== String(payload.id),
+              );
+              if (editingId === payload.id) setEditingId(null);
+              break;
+            // default: não é estritamente necessário aqui devido ao if externo.
+          }
+          return newDadosC.sort((a, b) => new Date(a.date) - new Date(b.date));
+        });
+      }
+
+      // --- Lida com atualizações na tabela R (dados 'exists') ---
+      if (
+        type === "BSA_NEW_ITEM" ||
+        type === "BSA_UPDATED_ITEM" ||
+        type === "BSA_DELETED_ITEM"
+      ) {
+        if (payload && String(payload.r) === String(r)) {
+          setExists((prevExists) => {
+            let newExists = [...prevExists];
+            const itemIndex = newExists.findIndex(
+              (item) => String(item.id) === String(payload.id),
+            );
+
+            switch (type) {
+              case "BSA_NEW_ITEM":
+                if (itemIndex === -1) newExists.push(payload);
+                break;
+              case "BSA_UPDATED_ITEM":
+                if (itemIndex !== -1)
+                  newExists[itemIndex] = {
+                    ...newExists[itemIndex],
+                    ...payload,
+                  };
+                else newExists.push(payload);
+                break;
+              case "BSA_DELETED_ITEM":
+                newExists = newExists.filter(
+                  (item) => String(item.id) !== String(payload.id),
+                );
+                break;
+            }
+            return newExists;
+          });
+        }
+      }
+
+      lastProcessedTimestampRef.current = lastMessage.timestamp;
+    }
+  }, [lastMessage, r, editingId, setDados, setExists]); // Adicionado setDados e setExists
+
+  const groupedResults = useMemo(() => {
+    return dados.reduce((acc, item) => {
+      const rawDate = Use.formatarData(item.date);
+      const dateObj = new Date(item.date);
+      const horas = String(dateObj.getHours()).padStart(2, "0");
+      const minutos = String(dateObj.getMinutes()).padStart(2, "0");
+      const horaFormatada = `${horas}:${minutos}`;
+
+      acc[rawDate] = acc[rawDate] || [];
+      acc[rawDate].push({
+        ...item,
+        horaSeparada: horaFormatada,
+        // Garante que os valores numéricos sejam tratados corretamente
+        valor: parseFloat(item.valor) || 0,
+        pix: parseFloat(item.pix) || 0,
+        real: parseFloat(item.real) || 0,
+        base: parseFloat(item.base) || 0,
+        sis: parseFloat(item.sis) || 0,
+        alt: parseFloat(item.alt) || 0,
+      });
+      return acc;
+    }, {});
+  }, [dados]);
 
   if (loading) {
     return <div className="text-center p-4">Carregando...</div>;
@@ -87,7 +197,20 @@ const Coluna = ({ r }) => {
 
   const startEditing = (item) => {
     setEditingId(item.id);
-    setEditedData({ ...item });
+    // Garante que os valores em editedData sejam strings para os inputs controlados,
+    // e que 'real' e 'pix' comecem formatados como string.
+    // Os valores de 'item' aqui vêm de 'groupedResults', onde já foram
+    // processados com parseFloat e podem ser números.
+    setEditedData({
+      ...item,
+      nome: String(item.nome !== undefined ? item.nome : ""),
+      base: String(item.base !== undefined ? item.base : "0"),
+      sis: String(item.sis !== undefined ? item.sis : "0"),
+      alt: String(item.alt !== undefined ? item.alt : "0"),
+      // formatCurrency já retorna uma string.
+      real: formatCurrency(item.real !== undefined ? item.real : 0),
+      pix: formatCurrency(item.pix !== undefined ? item.pix : 0),
+    });
   };
 
   return (
@@ -95,11 +218,11 @@ const Coluna = ({ r }) => {
       {Object.entries(groupedResults).map(([date, items]) => {
         // Calcula os totais para cada dia
         const totalReal = items.reduce(
-          (sum, item) => sum + (Number(item.real) || 0),
+          (sum, item) => sum + (parseFloat(item.real) || 0),
           0,
         );
         const totalPix = items.reduce(
-          (sum, item) => sum + (Number(item.pix) || 0),
+          (sum, item) => sum + (parseFloat(item.pix) || 0),
           0,
         );
         const totalDia = totalReal + totalPix;
@@ -159,8 +282,9 @@ const Coluna = ({ r }) => {
                     className={`border-b border-base-content/5 ${
                       exists.some(
                         (e) =>
-                          e.codigo === item.codigo &&
-                          Use.formatarData(e.data) === date,
+                          String(e.codigo) === String(item.codigo) && // Comparar como string
+                          Use.formatarData(e.data) ===
+                            Use.formatarData(item.date), // Comparar datas formatadas
                       )
                         ? "bg-error/70"
                         : ""
@@ -188,7 +312,7 @@ const Coluna = ({ r }) => {
                       {editingId === item.id ? (
                         <input
                           type="number"
-                          min="1"
+                          min="0"
                           value={editedData.base}
                           onChange={(e) =>
                             handleInputChange("base", e.target.value)
@@ -203,7 +327,7 @@ const Coluna = ({ r }) => {
                       {editingId === item.id ? (
                         <input
                           type="number"
-                          min="1"
+                          min="0"
                           value={editedData.sis}
                           onChange={(e) =>
                             handleInputChange("sis", e.target.value)
@@ -218,7 +342,7 @@ const Coluna = ({ r }) => {
                       {editingId === item.id ? (
                         <input
                           type="number"
-                          min="1"
+                          min="0"
                           value={editedData.alt}
                           onChange={(e) =>
                             handleInputChange("alt", e.target.value)
@@ -233,8 +357,8 @@ const Coluna = ({ r }) => {
                       {editingId === item.id ? (
                         <input
                           type="number"
-                          min="1"
-                          value={formatCurrency(editedData.real)}
+                          min="0"
+                          value={editedData.real} // Usar o valor string diretamente de editedData
                           onChange={(e) =>
                             handleInputChange("real", e.target.value)
                           }
@@ -248,8 +372,8 @@ const Coluna = ({ r }) => {
                       {editingId === item.id ? (
                         <input
                           type="number"
-                          min="1"
-                          value={formatCurrency(editedData.pix)}
+                          min="0"
+                          value={editedData.pix} // Usar o valor string diretamente de editedData
                           onChange={(e) =>
                             handleInputChange("pix", e.target.value)
                           }
@@ -270,7 +394,16 @@ const Coluna = ({ r }) => {
                         className={`btn btn-xs btn-soft btn-error ${
                           editingId === item.id ? "hidden" : ""
                         }`}
-                        onClick={() => Execute.removeC(item.id)}
+                        onClick={async () => {
+                          // Adiciona a chamada para o backend
+                          try {
+                            await Execute.removeC(item.id);
+                            // A UI será atualizada via WebSocket (C_DELETED_ITEM)
+                          } catch (error) {
+                            console.error("Erro ao excluir item C:", error);
+                            // Adicionar tratamento de erro para o usuário se necessário
+                          }
+                        }}
                       >
                         Excluir
                       </button>
