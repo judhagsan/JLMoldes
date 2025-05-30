@@ -1,4 +1,3 @@
-// Em /home/judhagsan/JLMoldes/models/functions.js
 const sendTrueMR = async (id, r) => {
   try {
     const response = await fetch("/api/v1/tables/RButton", {
@@ -79,9 +78,12 @@ async function sendToDeve(itemData) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         nome: itemData.nome,
+        deveid: itemData.deveid,
         data: itemData.data,
         codigo: itemData.codigo,
         r: itemData.r,
+        valorpapel: itemData.valorpapel,
+        valorcomissao: itemData.valorcomissao,
         valor: itemData.valor,
       }),
     });
@@ -98,20 +100,20 @@ async function sendToDeve(itemData) {
   }
 }
 
-async function sendToDeveUpdate(codigo, valor, r) {
+async function sendToDeveUpdate(codigo, valor, r, deveIdsArray, pix, real) {
   try {
-    const response = await fetch(
-      `/api/v1/tables/deve?codigo=${codigo}&valor=${valor}&r=${r}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          codigo,
-          valor,
-          r,
-        }),
-      },
-    );
+    const response = await fetch(`/api/v1/tables/deve`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        codigo,
+        valor,
+        r,
+        deveIdsArray,
+        pix,
+        real,
+      }),
+    });
 
     if (!response.ok) throw new Error("Erro ao atualizar");
   } catch (error) {
@@ -283,6 +285,46 @@ async function sendToOficina(
   }
 }
 
+async function sendToPapel(
+  letras,
+  item,
+  quantidade,
+  unidade,
+  valor,
+  gastos,
+  pago,
+  alerta,
+  metragem,
+) {
+  try {
+    const response = await fetch("/api/v1/tables/gastos/papel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        letras,
+        item,
+        quantidade,
+        unidade,
+        valor,
+        gastos,
+        pago,
+        alerta,
+        metragem,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Erro ao criar registro em Papel");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Erro no createPapel:", error);
+    throw error;
+  }
+}
+
 async function sendToC(itemData) {
   try {
     const response = await fetch("/api/v1/tables/c", {
@@ -345,6 +387,7 @@ async function sendToPapelC(itemData) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         codigo: itemData.codigo,
+        deveid: itemData.deveid,
         r: itemData.r,
         data: itemData.data,
         nome: itemData.nome,
@@ -358,6 +401,7 @@ async function sendToPapelC(itemData) {
         util: itemData.util,
         perdida: itemData.perdida,
         comentarios: itemData.comentario,
+        comissao: itemData.comissao,
       }),
     });
 
@@ -423,10 +467,10 @@ async function receiveFromDeve(r) {
   }
 }
 
-async function receiveFromDeveJustValor(codigo) {
+async function receiveFromDeveJustValor(codigo, r) {
   try {
     const response = await fetch(
-      `/api/v1/tables/calculadora/deve?codigo=${codigo}`,
+      `/api/v1/tables/calculadora/deve?codigo=${codigo}&r=${r}`,
     );
 
     if (!response.ok) {
@@ -743,7 +787,25 @@ async function receiveFromOficina(letras) {
     const data = await response.json();
     return Array.isArray(data.rows) ? data.rows : [];
   } catch (error) {
-    console.error("Erro ao buscar dados Pessoal:", error);
+    console.error("Erro ao buscar dados Oficina:", error);
+  }
+}
+
+async function receiveFromPapel(letras) {
+  try {
+    const response = await fetch(
+      `/api/v1/tables/gastos/papel?letras=${letras}`,
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Erro ao carregar os dados");
+    }
+
+    const data = await response.json();
+    return Array.isArray(data.rows) ? data.rows : [];
+  } catch (error) {
+    console.error("Erro ao buscar dados Papel:", error);
   }
 }
 
@@ -843,6 +905,17 @@ async function removeOficina(id) {
   console.log(result);
 }
 
+async function removePapel(id) {
+  const response = await fetch("/api/v1/tables/gastos/papel", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }), // Envia o `id` no corpo da requisição
+  });
+
+  const result = await response.json();
+  console.log(result);
+}
+
 async function removeDeve(codigo) {
   const response = await fetch("/api/v1/tables/deve", {
     method: "DELETE",
@@ -877,6 +950,7 @@ const execute = {
   sendToSaidaP,
   sendToSaidaO,
   sendToOficina,
+  sendToPapel,
   sendToPapelC,
   receiveFromC,
   receiveAnualFromC,
@@ -891,6 +965,7 @@ const execute = {
   receiveFromCData,
   receiveAnualFromPapelC,
   receiveFromConfig,
+  receiveFromPapel,
   receiveFromPapelC,
   receiveFromPapelCData,
   receiveFromRDeveDevo,
@@ -903,6 +978,7 @@ const execute = {
   receiveFromRJustBSA,
   removeC,
   removeNota,
+  removePapel,
   removePapelC,
   removePessoal,
   removeSaidaP,

@@ -108,7 +108,7 @@ const Rcontent = ({ codigoExterno, r }) => {
 
   return (
     <div>
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-flow-col auto-cols-auto gap-2">
         <div>
           <BSTA codigo={codigo} r={r} />
         </div>
@@ -125,6 +125,9 @@ const Rcontent = ({ codigoExterno, r }) => {
             data={data}
           />
           <Devo codigo={codigo} r={r} />
+        </div>
+        <div>
+          <h1>PAPEL CONTAGEM</h1>
         </div>
       </div>
     </div>

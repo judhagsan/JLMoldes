@@ -1,8 +1,14 @@
-/* global Map */
 import Execute from "models/functions";
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import Use from "models/utils.js";
+
+let codigoAleatorioGlobal = "";
+function gerarEArmazenarCodigoAleatorio() {
+  codigoAleatorioGlobal = Math.random().toString(36).slice(2, 10).toUpperCase();
+  console.log("Novo código aleatório gerado:", codigoAleatorioGlobal); // Para fins de demonstração
+  return codigoAleatorioGlobal;
+}
 
 const Calculadora = ({
   codigo,
@@ -34,6 +40,7 @@ const Calculadora = ({
 
   const [valorDevo, setValorDevo] = useState(0);
   const [valorDeve, setValorDeve] = useState(0);
+  const [deveIdsArray, setDeveIdsArray] = useState([]); // Novo estado para armazenar os deveids
   const [multiplier, setMultiplier] = useState(0);
   const [comissi, setComissi] = useState(0);
   const [desperdicio, setDesperdicio] = useState(0);
@@ -114,18 +121,31 @@ const Calculadora = ({
   useEffect(() => {
     const buscarDados = async () => {
       try {
-        const resultado = await Execute.receiveFromDeveJustValor(codigo);
-        // Soma todos os valores
+        // Garante que codigo e r estão presentes antes de buscar
+        if (!codigo || !r) {
+          setValorDeve(0);
+          setDeveIdsArray([]);
+          // console.log("valorDeve/deveIds: codigo ou r ausente, definindo para padrões");
+          return;
+        }
+        const resultado = await Execute.receiveFromDeveJustValor(codigo, r);
+
         const somaTotal = Number(resultado.total_valor || 0);
+        const ids = resultado.deveids || [];
 
         setValorDeve(somaTotal);
+        setDeveIdsArray(ids);
       } catch (error) {
-        console.error("Erro:", error);
+        console.error(
+          `Erro ao buscar valorDeve/deveIds para codigo: ${codigo}, r: ${r}:`,
+          error,
+        );
         setValorDeve(0);
+        setDeveIdsArray([]);
       }
     };
     buscarDados();
-  }, [codigo]);
+  }, [codigo, r]);
 
   useEffect(() => {
     const buscarDados = async () => {
@@ -361,20 +381,27 @@ const Calculadora = ({
         Number(real) == 0
       ) {
         if (Number(total) > 0) {
+          const novoCodigo = gerarEArmazenarCodigoAleatorio();
           await Execute.removeDevo(codigo);
           await Execute.sendToDeve({
+            deveid: novoCodigo,
             nome,
             r,
             data: Use.NowData(),
             codigo,
+            valorpapel: papel,
+            valorcomissao: comitions,
             valor: Number(total),
           });
 
           await Execute.sendToPapelC({
             ...ObjPapelC,
+            deveid: novoCodigo,
             data: Use.NowData(),
-            papelreal: papel,
-            encaixereal: comitions,
+            papelpix: 0,
+            papelreal: 0,
+            encaixepix: 0,
+            encaixereal: 0,
           });
         } else {
           setShowError(true);
@@ -401,13 +428,41 @@ const Calculadora = ({
         console.log("Caiu em foi tudo pago Papel e R.");
         //
       } else if (valorDeve && !trocoValue) {
+        await Execute.sendToDeveUpdate(
+          codigo,
+          trocoValue,
+          r,
+          deveIdsArray,
+          Number(pix),
+          Number(real),
+        );
         await Execute.removeDeve(codigo);
         await Execute.removeDevo(codigo);
+
         console.log("Caiu em Foi pago todo o papel.");
 
         //
       } else if (valorDeve && trocoValue && !dadosR) {
-        await Execute.sendToDeveUpdate(codigo, trocoValue, r);
+        const novoCodigo = gerarEArmazenarCodigoAleatorio();
+        await Execute.sendToDeve({
+          deveid: novoCodigo,
+          nome,
+          r,
+          data: Use.NowData(),
+          codigo,
+          valorpapel: papel,
+          valorcomissao: comitions,
+          valor: trocoValue,
+        });
+        await Execute.sendToPapelC({
+          ...ObjPapelC,
+          deveid: novoCodigo,
+          data: Use.NowData(),
+          papelpix: 0,
+          papelreal: 0,
+          encaixepix: 0,
+          encaixereal: 0,
+        });
         await Execute.removeDevo(codigo);
         console.log("Caiu em Foi pago Parte do Valor do Papel.");
         //
@@ -427,18 +482,26 @@ const Calculadora = ({
           await Execute.sendToC(ObjC1);
           await Execute.removeMandR(idsArray);
           if (total > 0) {
+            const novoCodigo = gerarEArmazenarCodigoAleatorio();
             await Execute.removeDevo(codigo);
-            await Execute.removeDeve(codigo);
             await Execute.sendToDeve({
+              deveid: novoCodigo,
               nome,
               r,
               data: Use.NowData(),
               codigo,
+              valorpapel: papel,
+              valorcomissao: comitions,
               valor: trocoValue,
             });
             await Execute.sendToPapelC({
               ...ObjPapelC,
+              deveid: novoCodigo,
               data: Use.NowData(),
+              papelpix: 0,
+              papelreal: 0,
+              encaixepix: 0,
+              encaixereal: 0,
             });
           } else {
             setShowError(true);
@@ -450,20 +513,30 @@ const Calculadora = ({
           (pixMaisReal < dadosR && pixMaisReal > Number(total))
         ) {
           const values = totalGeral - Number(total) - pixMaisReal;
+          const novoCodigo = gerarEArmazenarCodigoAleatorio();
           await sendToCAndUpdateR(values);
           if (total > 0) {
             await Execute.removeDevo(codigo);
             await Execute.removeDeve(codigo);
             await Execute.sendToDeve({
+              deveid: novoCodigo,
               nome,
               r,
               data: Use.NowData(),
               codigo,
+              valorpapel: papel,
+              valorcomissao: comitions,
               valor: Number(total),
             });
+
             await Execute.sendToPapelC({
               ...ObjPapelC,
+              deveid: novoCodigo,
               data: Use.NowData(),
+              papelpix: 0,
+              papelreal: 0,
+              encaixepix: 0,
+              encaixereal: 0,
             });
           } else {
             setShowError(true);
@@ -499,8 +572,6 @@ const Calculadora = ({
           console.log("Caiu em foi pago todo o Papel e deve todo o R.");
           //
         }
-        console.log("Caiu em foi pago Parte do R e Papel.");
-        //
       } else if (
         dadosR > 0 &&
         valorDeve > 0 &&
@@ -531,20 +602,24 @@ const Calculadora = ({
         console.log("Caiu em DEVO e Pagou tudo o Papel");
       } else if (Number(total) && !dadosR && !valorDeve && !trocoValue) {
         await Execute.sendToPapelC(ObjPapelC);
-        console.log("Caiu em Serviço só de papel e foi Pago todo o papel");
+        console.log("Caiu em tem Serviço e papel e foi Pago todo o papel");
       } else if (Number(total) && !dadosR && !valorDeve && trocoValue) {
-        await Execute.sendToPapelC({
-          ...ObjPapelC,
-          data: Use.NowData(),
-        });
+        const novoCodigo = gerarEArmazenarCodigoAleatorio();
         await Execute.sendToDeve({
+          deveid: novoCodigo,
           nome,
           r,
           data: Use.NowData(),
           codigo,
+          valorpapel: papel - pixMaisReal,
+          valorcomissao: comitions,
           valor: trocoValue,
         });
-        console.log("Caiu em Serviço só de papel e foi Pago parte o papel");
+        await Execute.sendToPapelC({
+          ...ObjPapelC,
+          deveid: novoCodigo,
+        });
+        console.log("Caiu em tem Serviço e papel e foi Pago parte o papel");
       } else {
         console.log("Caiu em sem condições");
       }
@@ -576,12 +651,18 @@ const Calculadora = ({
     pix: Number(pix),
   };
 
+  const activeValuesCount = values.reduce((count, currentValue) => {
+    return count + (currentValue !== "" ? 1 : 0);
+  }, 0);
+
   const ObjPapelC = {
+    deveid: 0,
     codigo,
     r,
-    data,
+    data: Use.NowData(),
     nome,
     multi: multiplier,
+    comissao: plus || 0,
     papel: papel || 0,
     papelpix: Number(pix) > 0 ? Math.min(Number(pix), papel) : 0,
     papelreal:
@@ -600,14 +681,14 @@ const Calculadora = ({
               (Number(pix) > 0 ? Math.min(Number(pix), comitions) : 0),
           )
         : 0,
-    desperdicio,
+    desperdicio: (Number(desperdicio) || 0) * activeValuesCount,
     util: sumValues,
-    perdida: perdida || 0,
+    perdida: Number(perdida) || 0,
     comentario,
   };
 
   return (
-    <div className="flex flex-col">
+    <>
       <form onSubmit={handleSubmit}>
         {/* Inputs superiores */}
         <div className="join z-2">
@@ -725,7 +806,7 @@ const Calculadora = ({
       {typeof window !== "undefined" && showError && (
         <ErrorComponent errorCode="Nulo" />
       )}
-    </div>
+    </>
   );
 };
 export default Calculadora;

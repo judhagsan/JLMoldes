@@ -1,16 +1,18 @@
 /* eslint-disable no-undef */
 /* eslint-disable react-hooks/exhaustive-deps */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import TabelaAnual from "../T/TabelaAnual.js";
 import SaldoMensal from "../T/SaldoMensal.js";
 import Execute from "models/functions.js";
+import { useWebSocket } from "../../../contexts/WebSocketContext.js";
 
 const AnualContent = () => {
   const [papelData, setPapelData] = useState([]);
   const [despesasDataP, setDespesasDataP] = useState([]);
   const [despesasDataO, setDespesasDataO] = useState([]);
   const [variosData, setVariosData] = useState([]);
+  const { lastMessage } = useWebSocket();
 
   const formatCurrency = (value) => {
     const numberValue = Number(value) || 0;
@@ -48,38 +50,95 @@ const AnualContent = () => {
     }));
   };
 
-  useEffect(() => {
-    const buscarDados = async () => {
-      try {
-        const [papel, despesasP, despesasO, varios] = await Promise.all([
-          Execute.receiveAnualFromPapelC(),
-          Execute.receiveAnualFromSaidaP(),
-          Execute.receiveAnualFromSaidaO(),
-          Execute.receiveAnualFromC(),
-        ]);
-        setPapelData(papel ? processarDados(papel, "data", "papel") : []);
-        setDespesasDataP(
-          despesasP ? processarDados(despesasP, "pago", "valor") : [],
-        );
-        setDespesasDataO(
-          despesasO ? processarDados(despesasO, "pago", "valor") : [],
-        );
-        setVariosData(
-          varios ? processarDados(varios, "date", ["sis", "alt", "base"]) : [],
-        );
-      } catch (error) {
-        console.error("Erro ao buscar dados:", error);
-        setPapelData([]);
-        setDespesasDataP([]);
-        setDespesasDataO([]);
-        setVariosData([]);
-      }
-    };
-
-    buscarDados();
-    const intervalo = setInterval(buscarDados, 5000);
-    return () => clearInterval(intervalo);
+  const fetchPapelData = useCallback(async () => {
+    try {
+      const papel = await Execute.receiveAnualFromPapelC();
+      setPapelData(papel ? processarDados(papel, "data", "papel") : []);
+    } catch (error) {
+      console.error("Erro ao buscar dados anuais 'papel':", error);
+      setPapelData([]);
+    }
   }, []);
+
+  const fetchDespesasPData = useCallback(async () => {
+    try {
+      const despesasP = await Execute.receiveAnualFromSaidaP();
+      setDespesasDataP(
+        despesasP ? processarDados(despesasP, "pago", "valor") : [],
+      );
+    } catch (error) {
+      console.error("Erro ao buscar dados anuais 'despesas P':", error);
+      setDespesasDataP([]);
+    }
+  }, []);
+
+  const fetchDespesasOData = useCallback(async () => {
+    try {
+      const despesasO = await Execute.receiveAnualFromSaidaO();
+      setDespesasDataO(
+        despesasO ? processarDados(despesasO, "pago", "valor") : [],
+      );
+    } catch (error) {
+      console.error("Erro ao buscar dados anuais 'despesas O':", error);
+      setDespesasDataO([]);
+    }
+  }, []);
+
+  const fetchVariosData = useCallback(async () => {
+    try {
+      const varios = await Execute.receiveAnualFromC();
+      setVariosData(
+        varios ? processarDados(varios, "date", ["sis", "alt", "base"]) : [],
+      );
+    } catch (error) {
+      console.error("Erro ao buscar dados anuais 'varios':", error);
+      setVariosData([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPapelData();
+    fetchDespesasPData();
+    fetchDespesasOData();
+    fetchVariosData();
+  }, [fetchPapelData, fetchDespesasPData, fetchDespesasOData, fetchVariosData]);
+
+  useEffect(() => {
+    if (lastMessage?.data) {
+      let messageData;
+
+      try {
+        if (typeof lastMessage.data === "string") {
+          messageData = JSON.parse(lastMessage.data);
+        } else {
+          messageData = lastMessage.data;
+        }
+      } catch (error) {
+        console.error("Erro ao parsear lastMessage.data:", error);
+        return; // Sai do efeito
+      }
+
+      const { type } = messageData;
+
+      if (typeof type === "string") {
+        if (type.startsWith("PAPELC_")) {
+          fetchPapelData();
+        } else if (type.startsWith("SAIDAS_PESSOAL_")) {
+          fetchDespesasPData();
+        } else if (type.startsWith("SAIDAS_OFICINA_")) {
+          fetchDespesasOData();
+        } else if (type.startsWith("C_")) {
+          fetchVariosData();
+        }
+      }
+    }
+  }, [
+    lastMessage,
+    fetchPapelData,
+    fetchDespesasPData,
+    fetchDespesasOData,
+    fetchVariosData,
+  ]);
 
   return (
     <>

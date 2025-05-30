@@ -41,6 +41,15 @@ function formatarDataHora(dataStr) {
 
   return `${diaSemana} - ${dia}/${mes} - ${hora}:${minutos}`;
 }
+function formatarDataHoraSegundo(dataStr) {
+  const data = new Date(dataStr);
+
+  const hora = String(data.getHours()).padStart(2, "0");
+  const minutos = String(data.getMinutes()).padStart(2, "0");
+  const segundo = String(data.getSeconds()).padStart(2, "0");
+
+  return `${hora}:${minutos}:${segundo}`;
+}
 
 // models/utils.js
 export function formatarDataAno(dataString) {
@@ -73,6 +82,7 @@ function NowData() {
 
 const use = {
   formatarDataHora,
+  formatarDataHoraSegundo,
   formatarData,
   formatarDataAno,
   formatarProximo,
