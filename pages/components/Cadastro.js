@@ -12,6 +12,7 @@ function Cadastro() {
   const [nome, setNome] = useState("");
   const [grupo, setGrupo] = useState("");
   const [observacao, setObservacao] = useState("");
+  const [comentario, setComentario] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,6 +28,7 @@ function Cadastro() {
       nome,
       grupo,
       observacao,
+      comentario,
     };
 
     try {
@@ -48,6 +50,7 @@ function Cadastro() {
       setGrupo("");
       setNome("");
       setObservacao("");
+      setComentario("");
     } catch (error) {
       console.error("Erro ao enviar:", error);
     }
@@ -56,7 +59,7 @@ function Cadastro() {
   return (
     <div className="h-full">
       {/* Formulário */}
-      <div className="bg-base-100 border-base-300 pb-2 px-[5%]">
+      <div className="bg-base-100 border-base-300 pb-2">
         <form onSubmit={handleSubmit}>
           <input
             type="text"
@@ -127,6 +130,13 @@ function Cadastro() {
             className="input input-info input-xs join-item w-70"
             value={observacao}
             onChange={(e) => setObservacao(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Comentario"
+            className="input input-info input-xs join-item w-70"
+            value={comentario}
+            onChange={(e) => setComentario(e.target.value)}
           />
           <button type="submit" className="btn btn-xs btn-info join-item">
             Enviar

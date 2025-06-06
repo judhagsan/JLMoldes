@@ -3,8 +3,8 @@ import database from "infra/database.js";
 async function createCad(ordemInputValues) {
   const result = await database.query({
     text: `
-      INSERT INTO "cadastro" (regiao, codigo, facebook, instagram, email, whatsapp1, whatsapp2, nome, grupo, observacao) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO "cadastro" (regiao, codigo, facebook, instagram, email, whatsapp1, whatsapp2, nome, grupo, observacao, comentario) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *;
     `,
     values: [
@@ -18,6 +18,7 @@ async function createCad(ordemInputValues) {
       ordemInputValues.nome,
       ordemInputValues.grupo,
       ordemInputValues.observacao,
+      ordemInputValues.comentario,
     ],
   });
 
@@ -37,8 +38,9 @@ async function updateCad(updatedData) {
         whatsapp2 = $7,
         nome = $8,
         grupo = $9,
-        observacao = $10
-      WHERE id = $11
+        observacao = $10,
+        comentario = $11
+      WHERE id = $12
       RETURNING *;
     `,
     values: [
@@ -52,6 +54,7 @@ async function updateCad(updatedData) {
       updatedData.nome,
       updatedData.grupo,
       updatedData.observacao,
+      updatedData.comentario,
       updatedData.id,
     ],
   });
@@ -67,10 +70,11 @@ async function getCad() {
 }
 
 export async function deleteCad(id) {
-  return database.query({
+  const result = await database.query({
     text: `DELETE FROM "cadastro" WHERE id = $1 RETURNING *;`,
     values: [id],
   });
+  return result.rows;
 }
 
 const ordem = {

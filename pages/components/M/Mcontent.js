@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
 import TabelaM from "./TabelaM.js";
+import TableDec from "./TableDec.js";
 import CodigoVerifier from "../CodigoVerifier.js";
 import ErrorComponent from "../Errors.js";
 import Rcontent from "../R/RContent.js";
 import Config from "../Config.js";
 import Notes from "./Notes.js";
 import Alerta from "./Alertas.js";
+import { useWebSocket } from "../../../contexts/WebSocketContext.js";
 
 const Mcontent = ({ oficina, r }) => {
+  const [cadastroItems, setCadastroItems] = useState([]);
   const [observacao, setObservacao] = useState("");
   const [dec, setDec] = useState("");
   const [codigo, setCodigo] = useState("");
@@ -17,68 +20,94 @@ const Mcontent = ({ oficina, r }) => {
   const [alt, setAlt] = useState("");
   const [showError, setErrorCode] = useState(false);
 
-  // Busca a observação correspondente ao código digitado
-  useEffect(() => {
-    const fetchDados = async () => {
-      if (!codigo) {
-        setObservacao("");
-        setNome("");
-        return;
-      }
+  const { lastMessage } = useWebSocket();
 
+  useEffect(() => {
+    const fetchInitialCadastroData = async () => {
       try {
         const response = await fetch("/api/v1/tables/cadastro");
-        if (!response.ok) throw new Error("Erro ao buscar dados");
-
+        if (!response.ok)
+          throw new Error("Erro ao buscar dados iniciais de cadastro");
         const data = await response.json();
-        const registroEncontrado = data.rows.find(
-          (item) => item.codigo === codigo,
+        setCadastroItems(Array.isArray(data.rows) ? data.rows : []);
+      } catch (error) {
+        console.error("Erro ao buscar dados iniciais de cadastro:", error);
+        setCadastroItems([]);
+      }
+    };
+    fetchInitialCadastroData();
+  }, []);
+
+  useEffect(() => {
+    if (lastMessage && lastMessage.data) {
+      const { type, payload } = lastMessage.data;
+
+      if (type === "CADASTRO_NEW_ITEM" && payload) {
+        setCadastroItems((prevItems) => {
+          if (prevItems.find((item) => item.id === payload.id)) {
+            return prevItems.map((item) =>
+              item.id === payload.id ? payload : item,
+            );
+          }
+          return [...prevItems, payload];
+        });
+      } else if (type === "CADASTRO_UPDATED_ITEM" && payload) {
+        setCadastroItems((prevItems) =>
+          prevItems.map((item) =>
+            item.id === payload.id ? { ...item, ...payload } : item,
+          ),
         );
-
-        if (registroEncontrado) {
-          setObservacao(registroEncontrado.observacao || "");
-          setNome(registroEncontrado.nome || "");
-        } else {
-          setObservacao("");
-          setNome("");
-        }
-      } catch (error) {
-        console.error("Erro ao buscar dados:", error);
       }
-    };
+    }
+  }, [lastMessage]);
 
-    fetchDados();
-  }, [codigo]);
-
+  // useEffect para código (modificado)
   useEffect(() => {
-    const fetchDados = async () => {
-      if (!nome) {
-        setObservacao("");
-        setCodigo("");
-        return;
-      }
+    const codigoBuscado = codigo.trim().toUpperCase();
 
-      try {
-        const response = await fetch("/api/v1/tables/cadastro");
-        if (!response.ok) throw new Error("Erro ao buscar dados");
+    // Sempre limpa quando o código está vazio
+    if (!codigoBuscado) {
+      setObservacao("");
+      setNome("");
+      return;
+    }
 
-        const data = await response.json();
-        const registroEncontrado = data.rows.find((item) => item.nome === nome);
+    const registro = cadastroItems.find(
+      (item) => item.codigo?.toString().trim().toUpperCase() === codigoBuscado,
+    );
 
-        if (registroEncontrado) {
-          setObservacao(registroEncontrado.observacao || "");
-          setCodigo(registroEncontrado.codigo || "");
-        } else {
-          setObservacao("");
-          setCodigo("");
-        }
-      } catch (error) {
-        console.error("Erro ao buscar dados:", error);
-      }
-    };
+    if (registro) {
+      setObservacao(registro.observacao || "");
+      setNome(registro.nome || "");
+    } else {
+      setObservacao("");
+      setNome("");
+    }
+  }, [codigo, cadastroItems]);
 
-    fetchDados();
-  }, [nome]);
+  // useEffect para nome (modificado)
+  useEffect(() => {
+    const nomeBuscado = nome.trim().toLowerCase();
+
+    // Sempre limpa quando o nome está vazio
+    if (!nomeBuscado) {
+      setObservacao("");
+      setCodigo("");
+      return;
+    }
+
+    const registro = cadastroItems.find(
+      (item) => item.nome?.trim().toLowerCase() === nomeBuscado,
+    );
+
+    if (registro) {
+      setObservacao(registro.observacao || "");
+      setCodigo(registro.codigo?.toString() || "");
+    } else {
+      setObservacao("");
+      setCodigo("");
+    }
+  }, [nome, cadastroItems]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -95,7 +124,7 @@ const Mcontent = ({ oficina, r }) => {
     };
 
     // Condição para separar os dados em duas tabelas
-    let hasInserted = false; // Flag para evitar inserções duplicadas
+    let hasInserted = false;
 
     // Se todos os valores forem 0, exibe o erro e interrompe a execução
     if (parseInt(base) === 0 && parseInt(sis) === 0 && parseInt(alt) === 0) {
@@ -261,16 +290,26 @@ const Mcontent = ({ oficina, r }) => {
         </form>
         <Config />
       </div>
-      <div className="columns-2">
-        <TabelaM oficina={oficina} r={r} />
+      <div className="grid grid-cols-[2fr_2fr_1fr] gap-2">
         <TabelaM
           oficina={oficina}
           r={r}
-          mainEndpoint="Base"
-          secondaryEndpoint="tables/R"
+          filterType="alt_sis" // Para a tabela que mostra sis > 0 ou alt > 0
+          columnsConfig={[
+            { field: "sis", label: "Sis", min: 1 },
+            { field: "alt", label: "Alt", min: 1 },
+          ]}
+          filterCondition={(item) => item.sis > 0 || item.alt > 0}
+        />
+        <TabelaM
+          oficina={oficina}
+          r={r}
+          filterType="base" // Para a tabela que mostra base > 0
+          secondaryEndpoint="tables/R" // Mantido se necessário para o handleSave
           columnsConfig={[{ field: "base", label: "Base", min: 0 }]}
           filterCondition={(item) => item.base > 0}
         />
+        <TableDec r={r} />
       </div>
       <div className="divider divider-neutral">OFICINA</div>
       <div>

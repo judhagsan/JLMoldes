@@ -9,9 +9,9 @@ router.get(getHandlerDeveJustValor);
 export default router.handler(controller.errorHandlers);
 
 async function getHandlerDeveJustValor(request, response) {
-  const { codigo } = request.query;
+  const { codigo, r } = request.query;
   try {
-    const valores = await ordem.getDeveJustValor(codigo);
+    const valores = await ordem.getDeveJustValor(codigo, r);
     response.status(200).json(valores);
   } catch (error) {
     response.status(500).json({ error: error.message });

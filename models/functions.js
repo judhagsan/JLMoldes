@@ -1,4 +1,3 @@
-// Em /home/judhagsan/JLMoldes/models/functions.js
 const sendTrueMR = async (id, r) => {
   try {
     const response = await fetch("/api/v1/tables/RButton", {
@@ -79,9 +78,12 @@ async function sendToDeve(itemData) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         nome: itemData.nome,
+        deveid: itemData.deveid,
         data: itemData.data,
         codigo: itemData.codigo,
         r: itemData.r,
+        valorpapel: itemData.valorpapel,
+        valorcomissao: itemData.valorcomissao,
         valor: itemData.valor,
       }),
     });
@@ -98,20 +100,20 @@ async function sendToDeve(itemData) {
   }
 }
 
-async function sendToDeveUpdate(codigo, valor, r) {
+async function sendToDeveUpdate(codigo, valor, r, deveIdsArray, pix, real) {
   try {
-    const response = await fetch(
-      `/api/v1/tables/deve?codigo=${codigo}&valor=${valor}&r=${r}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          codigo,
-          valor,
-          r,
-        }),
-      },
-    );
+    const response = await fetch(`/api/v1/tables/deve`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        codigo,
+        valor,
+        r,
+        deveIdsArray,
+        pix,
+        real,
+      }),
+    });
 
     if (!response.ok) throw new Error("Erro ao atualizar");
   } catch (error) {
@@ -283,6 +285,46 @@ async function sendToOficina(
   }
 }
 
+async function sendToPapel(
+  letras,
+  item,
+  quantidade,
+  unidade,
+  valor,
+  gastos,
+  pago,
+  alerta,
+  metragem,
+) {
+  try {
+    const response = await fetch("/api/v1/tables/gastos/papel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        letras,
+        item,
+        quantidade,
+        unidade,
+        valor,
+        gastos,
+        pago,
+        alerta,
+        metragem,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Erro ao criar registro em Papel");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Erro no createPapel:", error);
+    throw error;
+  }
+}
+
 async function sendToC(itemData) {
   try {
     const response = await fetch("/api/v1/tables/c", {
@@ -345,6 +387,7 @@ async function sendToPapelC(itemData) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         codigo: itemData.codigo,
+        deveid: itemData.deveid,
         r: itemData.r,
         data: itemData.data,
         nome: itemData.nome,
@@ -358,6 +401,7 @@ async function sendToPapelC(itemData) {
         util: itemData.util,
         perdida: itemData.perdida,
         comentarios: itemData.comentario,
+        comissao: itemData.comissao,
       }),
     });
 
@@ -370,6 +414,66 @@ async function sendToPapelC(itemData) {
   } catch (error) {
     console.error("Erro no createPapelC:", error);
     throw error;
+  }
+}
+async function sendToPagamentos(itemData) {
+  try {
+    const response = await fetch("/api/v1/tables/pagamentos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(itemData), // Send the whole itemData object
+    });
+
+    if (!response.ok) {
+      let errorMsg = `Erro ao criar registro em Pagamentos (Status: ${response.status})`;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.error || errorData.message || errorMsg;
+      } catch (parseError) {
+        // Ignora se o corpo não for JSON válido
+      }
+      throw new Error(errorMsg);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Erro no sendToPagamentos:", error);
+    throw error;
+  }
+}
+
+async function sendToTemp(itemData) {
+  try {
+    const response = await fetch("/api/v1/tables/temp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(itemData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response
+        .json()
+        .catch(() => ({ error: "Erro desconhecido ao enviar para Temp" }));
+      throw new Error(
+        errorData.error || `Erro ${response.status} ao criar registro em Temp`,
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Erro no sendToTemp:", error);
+    throw error;
+  }
+}
+
+async function receiveFromTemp() {
+  try {
+    const response = await fetch(`/api/v1/tables/temp`);
+    if (!response.ok) throw new Error("Erro ao carregar os dados de Temp");
+    const data = await response.json();
+    return Array.isArray(data.rows) ? data.rows : [];
+  } catch (error) {
+    console.error("Erro ao buscar dados Temp:", error);
+    return [];
   }
 }
 
@@ -423,10 +527,10 @@ async function receiveFromDeve(r) {
   }
 }
 
-async function receiveFromDeveJustValor(codigo) {
+async function receiveFromDeveJustValor(codigo, r) {
   try {
     const response = await fetch(
-      `/api/v1/tables/calculadora/deve?codigo=${codigo}`,
+      `/api/v1/tables/calculadora/deve?codigo=${codigo}&r=${r}`,
     );
 
     if (!response.ok) {
@@ -477,6 +581,30 @@ async function receiveFromDevoJustValor(codigo) {
   }
 }
 
+async function receiveFromPagamentos(r) {
+  try {
+    if (typeof r === "undefined" || r === null) {
+      console.warn("receiveFromPagamentos: 'r' parameter is missing.");
+      return [];
+    }
+    const response = await fetch(`/api/v1/tables/pagamentos?r=${r}`);
+    if (!response.ok) {
+      let errorMsg = `Error fetching pagamentos (Status: ${response.status})`;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.error || errorData.message || errorMsg;
+      } catch (e) {
+        // ignore if not json
+      }
+      throw new Error(errorMsg);
+    }
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error(`Error fetching pagamentos for r=${r}:`, error);
+    return [];
+  }
+}
 async function receiveFromDevo(r) {
   try {
     const response = await fetch(`/api/v1/tables/devo?r=${r}`);
@@ -485,6 +613,19 @@ async function receiveFromDevo(r) {
     return Array.isArray(data.rows) ? data.rows : [];
   } catch (error) {
     console.error("Erro ao buscar dados Devo:", error);
+    return [];
+  }
+}
+
+async function receiveFromDec(r) {
+  try {
+    const response = await fetch(`/api/v1/tables/dec?r=${r}`);
+    if (!response.ok) throw new Error("Erro ao carregar os dados");
+    const data = await response.json();
+    // A API já retorna o array de linhas diretamente.
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error("Erro ao buscar dados Dec:", error);
     return [];
   }
 }
@@ -743,7 +884,56 @@ async function receiveFromOficina(letras) {
     const data = await response.json();
     return Array.isArray(data.rows) ? data.rows : [];
   } catch (error) {
-    console.error("Erro ao buscar dados Pessoal:", error);
+    console.error("Erro ao buscar dados Oficina:", error);
+  }
+}
+
+async function receiveFromPapel(letras) {
+  try {
+    const response = await fetch(
+      `/api/v1/tables/gastos/papel?letras=${letras}`,
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Erro ao carregar os dados");
+    }
+
+    const data = await response.json();
+    return Array.isArray(data.rows) ? data.rows : [];
+  } catch (error) {
+    console.error("Erro ao buscar dados Papel:", error);
+  }
+}
+
+async function receiveFromCad(codigo) {
+  try {
+    const response = await fetch(
+      `/api/v1/tables/calculadora/cadastro?codigo=${codigo}`,
+    );
+
+    const data = await response.json();
+    return Array.isArray(data.rows) ? data.rows : [];
+  } catch (error) {
+    console.error("Erro ao buscar dados comentario:", error);
+  }
+}
+
+async function receiveFromPapelCalculadora(oficina) {
+  try {
+    const response = await fetch(
+      `/api/v1/tables/calculadora/papel?oficina=${oficina}`,
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Erro ao carregar os dados");
+    }
+
+    const data = await response.json();
+    return Array.isArray(data.rows) ? data.rows : [];
+  } catch (error) {
+    console.error("Erro ao buscar dados Papel:", error);
   }
 }
 
@@ -843,6 +1033,17 @@ async function removeOficina(id) {
   console.log(result);
 }
 
+async function removePapel(id) {
+  const response = await fetch("/api/v1/tables/gastos/papel", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }), // Envia o `id` no corpo da requisição
+  });
+
+  const result = await response.json();
+  console.log(result);
+}
+
 async function removeDeve(codigo) {
   const response = await fetch("/api/v1/tables/deve", {
     method: "DELETE",
@@ -858,13 +1059,59 @@ async function removeDevo(codigo) {
   const response = await fetch("/api/v1/tables/devo", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ codigo }), // Envia o `id` no corpo da requisição
+    body: JSON.stringify({ codigo }),
   });
 
   const result = await response.json();
   console.log(result);
 }
 
+async function removeTemp(itemId) {
+  try {
+    const response = await fetch(`/api/v1/tables/temp`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id: itemId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({
+        error: `Erro ao excluir item Temp ${itemId} (Status: ${response.status})`,
+      }));
+      throw new Error(errorData.error || `Erro HTTP ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error(`Erro em removeTemp (ID ${itemId}):`, error);
+    throw error;
+  }
+}
+
+async function deleteAllPagamentos() {
+  try {
+    const response = await fetch(`/api/v1/tables/pagamentos`, {
+      // Sem query param 'r'
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!response.ok) {
+      let errorMsg = `Erro ao deletar todos os pagamentos (Status: ${response.status})`;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.error || errorData.message || errorMsg;
+      } catch (parseError) {
+        // Ignora se o corpo não for JSON válido
+      }
+      throw new Error(errorMsg);
+    }
+  } catch (error) {
+    console.error(`Erro em deleteAllPagamentos:`, error);
+    throw error;
+  }
+}
 const execute = {
   sendTrueMR,
   sendToR,
@@ -877,7 +1124,11 @@ const execute = {
   sendToSaidaP,
   sendToSaidaO,
   sendToOficina,
+  sendToPapel,
   sendToPapelC,
+  sendToPagamentos,
+  receiveFromTemp,
+  sendToTemp,
   receiveFromC,
   receiveAnualFromC,
   receiveFromCGastos,
@@ -891,18 +1142,24 @@ const execute = {
   receiveFromCData,
   receiveAnualFromPapelC,
   receiveFromConfig,
+  receiveFromPapel,
+  receiveFromPapelCalculadora,
   receiveFromPapelC,
   receiveFromPapelCData,
   receiveFromRDeveDevo,
   receiveFromDeve,
+  receiveFromDec,
   receiveFromDeveJustValor,
   receiveFromDevo,
   receiveFromDevoJustValor,
   receiveFromNota,
+  receiveFromPagamentos,
   receiveFromR,
   receiveFromRJustBSA,
+  receiveFromCad,
   removeC,
   removeNota,
+  removePapel,
   removePapelC,
   removePessoal,
   removeSaidaP,
@@ -911,6 +1168,8 @@ const execute = {
   removeMandR,
   removeDeve,
   removeDevo,
+  removeTemp,
+  deleteAllPagamentos,
 };
 
 export default execute;

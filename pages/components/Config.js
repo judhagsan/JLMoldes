@@ -1,11 +1,13 @@
 import Edit from "./Edit";
 import Execute from "models/functions";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useWebSocket } from "../../contexts/WebSocketContext"; // Assuming this is the correct path
 
 const Config = () => {
   const [result, setResult] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editedData, setEditedData] = useState({});
+  const lastProcessedTimestampRef = useRef(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -14,6 +16,47 @@ const Config = () => {
     };
     fetchData();
   }, []);
+
+  const { lastMessage } = useWebSocket();
+
+  useEffect(() => {
+    if (lastMessage && lastMessage.data && lastMessage.timestamp) {
+      if (
+        lastProcessedTimestampRef.current &&
+        lastMessage.timestamp <= lastProcessedTimestampRef.current
+      ) {
+        console.log(
+          "Config.js: Ignorando mensagem WebSocket já processada (mesmo timestamp). Timestamp:",
+          lastMessage.timestamp,
+        );
+        return;
+      }
+
+      const { type, payload } = lastMessage.data;
+      console.log(
+        "Config.js: Mensagem WebSocket recebida:",
+        type,
+        payload,
+        "Timestamp:",
+        lastMessage.timestamp,
+      );
+
+      switch (type) {
+        case "CONFIG_UPDATED_ITEM":
+          if (payload) {
+            setResult([payload]);
+            if (editingId === payload.id) {
+              setEditingId(null);
+            }
+          }
+          break;
+        default:
+          console.log("Tipo de mensagem desconhecido:", type);
+      }
+
+      lastProcessedTimestampRef.current = lastMessage.timestamp;
+    }
+  }, [lastMessage, editingId]);
 
   const handleInputChange = (field, value) => {
     setEditedData((prev) => ({ ...prev, [field]: value }));
@@ -33,15 +76,6 @@ const Config = () => {
       });
 
       if (!response.ok) throw new Error("Erro ao atualizar");
-
-      // Atualiza o estado local com os novos dados
-      setResult((prev) => {
-        const updated = [...prev];
-        updated[0] = { ...updated[0], ...editedData };
-        return updated;
-      });
-
-      setEditingId(null);
     } catch (error) {
       console.error("Erro ao salvar:", error);
     }

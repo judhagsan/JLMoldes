@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import Edit from "../Edit.js";
 import Execute from "models/functions.js";
 import Use from "models/utils.js";
 import { XCircleIcon } from "@primer/octicons-react";
 import { CheckIcon } from "@primer/octicons-react";
 import { AlertIcon } from "@primer/octicons-react";
+import { useWebSocket } from "../../../contexts/WebSocketContext.js"; // Importar o hook
 
 const Oficina = ({ letras }) => {
   const [data, setData] = useState([]);
@@ -22,21 +23,107 @@ const Oficina = ({ letras }) => {
   const [editingId, setEditingId] = useState(null);
   const [editedData, setEditedData] = useState({});
 
-  const fetchData = async () => {
-    try {
-      const results = await Execute.receiveFromOficina(letras);
-      setData(results); // Armazena os dados recebidos
-    } catch (error) {
-      console.error("Erro:", error);
-    }
-  };
+  const { lastMessage } = useWebSocket(); // Usar o hook WebSocket
+  const lastProcessedTimestampRef = useRef(null);
 
   useEffect(() => {
+    const fetchData = async () => {
+      if (!letras) return;
+      try {
+        const results = await Execute.receiveFromOficina(letras);
+        setData(results || []); // Garante que seja um array
+      } catch (error) {
+        console.error("Erro ao buscar dados de Oficina:", error);
+        setData([]);
+      }
+    };
+
     fetchData();
-    const intervalId = setInterval(fetchData, 5000);
-    return () => clearInterval(intervalId);
+    // O polling com setInterval foi removido
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [letras]); // Re-fetch se 'letras' mudar
+
+  // Efeito para lidar com mensagens WebSocket
+  useEffect(() => {
+    if (lastMessage && lastMessage.data && lastMessage.timestamp) {
+      // Se o timestamp da mensagem atual for o mesmo da última processada, ignore.
+      if (
+        lastProcessedTimestampRef.current &&
+        lastMessage.timestamp <= lastProcessedTimestampRef.current
+      ) {
+        console.log(
+          "Oficina.js: Ignorando mensagem WebSocket já processada (mesmo timestamp). Timestamp:",
+          lastMessage.timestamp,
+        );
+        return;
+      }
+
+      const { type, payload } = lastMessage.data;
+      console.log(
+        "Oficina.js: Mensagem WebSocket recebida:",
+        type,
+        payload,
+        "Timestamp:",
+        lastMessage.timestamp,
+      );
+
+      // Verifica se o payload existe e se a mensagem é relevante para este componente (mesmo 'letras', que parece ser 'dec' no payload)
+      if (payload) {
+        switch (type) {
+          case "OFICINA_NEW_ITEM":
+            // Adiciona o novo item se corresponder à 'letra' (dec) atual do componente
+            if (payload.dec === letras) {
+              setData((prevData) => {
+                // Evitar duplicatas se por algum motivo o item já existir
+                if (prevData.find((item) => item.id === payload.id)) {
+                  return prevData.map((item) =>
+                    item.id === payload.id ? payload : item,
+                  );
+                }
+                return [...prevData, payload];
+              });
+            }
+            break;
+          case "OFICINA_UPDATED_ITEM":
+            setData((prevData) =>
+              prevData.map((item) =>
+                item.id === payload.id ? { ...item, ...payload } : item,
+              ),
+            );
+
+            if (editingId == payload.id) {
+              console.log(
+                `Oficina.js: WebSocket está fechando a edição para ID: ${payload.id}. Current editingId: ${editingId}`,
+              );
+              setEditingId(null); // Fecha o formulário de edição se o item editado foi atualizado
+            }
+            break;
+          case "OFICINA_DELETED_ITEM":
+            console.log("Payload recebido para exclusão:", payload);
+            if (payload && payload.id !== undefined) {
+              const idToRemove = String(payload.id);
+              setData((prevData) =>
+                prevData.filter((item) => String(item.id) !== idToRemove),
+              );
+              // Fechar edição se o item excluído estava sendo editado
+              if (editingId === payload.id) {
+                setEditingId(null);
+              }
+            }
+            break;
+          default:
+            // Tipo de mensagem não relevante para este componente ou desconhecido
+            break;
+        }
+      }
+      // Após processar a mensagem, atualize o timestamp da última mensagem processada.
+      lastProcessedTimestampRef.current = lastMessage.timestamp;
+      console.log(
+        "Oficina.js: Timestamp da última mensagem processada atualizado para:",
+        lastMessage.timestamp,
+      );
+    }
+  }, [lastMessage, letras, editingId]);
 
   // Ordenação e agrupamento dos dados
   const sortedData = [...data].sort((a, b) => a.item.localeCompare(b.item));
@@ -76,14 +163,9 @@ const Oficina = ({ letras }) => {
         body: JSON.stringify(editedData),
       });
       if (!response.ok) throw new Error("Erro ao atualizar");
-
-      // Atualiza o array de dados com as alterações
-      setData(
-        data.map((item) =>
-          item.id === editedData.id ? { ...item, ...editedData } : item,
-        ),
+      console.log(
+        "Oficina.js: Dados salvos via API. Aguardando mensagem WebSocket para fechar o modo de edição.",
       );
-      setEditingId(null);
     } catch (error) {
       console.error("Erro ao salvar:", error);
     }
@@ -105,8 +187,7 @@ const Oficina = ({ letras }) => {
 
       if (!response.ok) throw new Error("Erro ao atualizar pagamento");
 
-      // Atualiza o estado local
-      setData(data.map((item) => (item.id === entry.id ? updatedEntry : item)));
+      // A atualização do estado 'data' será feita pela mensagem WebSocket 'OFICINA_UPDATED'
 
       // Registra na saída
       await Execute.sendToSaidaO(
@@ -128,6 +209,8 @@ const Oficina = ({ letras }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Execute.sendToOficina fará o POST.
+    // O backend, após salvar, enviará uma mensagem WebSocket 'OFICINA_UPDATED'.
 
     await Execute.sendToOficina(
       letras,
@@ -142,6 +225,8 @@ const Oficina = ({ letras }) => {
       alerta,
     );
 
+    // Execute.sendToSaidaO também fará um POST.
+    // O backend correspondente também precisará notificar via WebSocket se essa ação afeta outros componentes.
     await Execute.sendToSaidaO(letras, item, gastos, valor, pago);
 
     setItem("");
@@ -153,6 +238,15 @@ const Oficina = ({ letras }) => {
     setProximo("");
     setDia("");
     setAlerta("");
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await Execute.removeOficina(id);
+      // A atualização do estado 'data' virá via WebSocket 'OFICINA_UPDATED'
+    } catch (error) {
+      console.error("Erro ao excluir item de Oficina:", error);
+    }
   };
 
   const getStatusVencimento = (entry) => {
@@ -197,10 +291,11 @@ const Oficina = ({ letras }) => {
           <select
             className="select select-info select-xs"
             value={item}
+            required
             onChange={(e) => setItem(e.target.value)}
           >
             <option disabled value="">
-              Itens
+              Oficinas
             </option>
             <option>R1</option>
             <option>R2</option>
@@ -208,6 +303,7 @@ const Oficina = ({ letras }) => {
           </select>
           <input
             type="number"
+            required
             placeholder="Quantidade"
             className="input input-info input-xs"
             value={quantidade}
@@ -215,6 +311,7 @@ const Oficina = ({ letras }) => {
           />
           <input
             type="number"
+            required
             placeholder="Unidade"
             className="input input-info input-xs"
             value={unidade}
@@ -246,6 +343,7 @@ const Oficina = ({ letras }) => {
           />
           <input
             type="number"
+            required
             placeholder="Mês"
             className="input input-warning input-xs custom-date-input"
             value={proximo}
@@ -272,7 +370,7 @@ const Oficina = ({ letras }) => {
           </button>
         </form>
         <table className="table table-xs">
-          <thead>
+          <thead className="text-center">
             <tr>
               <th className="hidden">ID</th>
               <th>Item</th>
@@ -436,7 +534,7 @@ const Oficina = ({ letras }) => {
                     />
                     <button
                       className={`btn btn-xs btn-soft btn-error ${editingId === entry.id ? "hidden" : ""}`}
-                      onClick={() => Execute.removeOficina(entry.id)}
+                      onClick={() => handleDelete(entry.id)}
                     >
                       Excluir
                     </button>
@@ -477,7 +575,7 @@ const Oficina = ({ letras }) => {
                 // Demais linhas do grupo sem a célula do Item
                 <tr key={entry.id}>
                   <td className="hidden">{entry.id}</td>
-                  <td className="px-0.5">
+                  <td className="px-0.5 text-center">
                     {editingId === entry.id ? (
                       <input
                         type="number"
@@ -491,7 +589,7 @@ const Oficina = ({ letras }) => {
                       entry.quantidade
                     )}
                   </td>
-                  <td className="px-0.5">
+                  <td className="px-0.5 text-center">
                     {editingId === entry.id ? (
                       <input
                         type="number"
@@ -505,7 +603,7 @@ const Oficina = ({ letras }) => {
                       entry.unidade
                     )}
                   </td>
-                  <td className="px-0.5">
+                  <td className="px-0.5 text-center">
                     {editingId === entry.id ? (
                       <input
                         type="number"
@@ -519,7 +617,7 @@ const Oficina = ({ letras }) => {
                       entry.valor
                     )}
                   </td>
-                  <td className="px-0.5">
+                  <td className="px-0.5 text-center">
                     {editingId === entry.id ? (
                       <input
                         type="text"
@@ -533,7 +631,7 @@ const Oficina = ({ letras }) => {
                       entry.gastos
                     )}
                   </td>
-                  <td className="px-0.5">
+                  <td className="px-0.5 text-center">
                     {editingId === entry.id ? (
                       <input
                         type="date"
@@ -549,7 +647,7 @@ const Oficina = ({ letras }) => {
                       Use.formatarDataAno(entry.pago)
                     )}
                   </td>
-                  <td className="px-0.5">
+                  <td className="px-0.5 text-center">
                     {editingId === entry.id ? (
                       <input
                         type="date"
@@ -567,7 +665,7 @@ const Oficina = ({ letras }) => {
                       Use.formatarDataAno(entry.proximo)
                     )}
                   </td>
-                  <td className="px-0.5">
+                  <td className="px-0.5 text-center">
                     {editingId === entry.id ? (
                       <input
                         type="number"
@@ -581,7 +679,7 @@ const Oficina = ({ letras }) => {
                       entry.dia
                     )}
                   </td>
-                  <td className="px-0.5">
+                  <td className="px-0.5 text-center">
                     {editingId === entry.id ? (
                       <input
                         type="number"
@@ -595,7 +693,7 @@ const Oficina = ({ letras }) => {
                       entry.alerta
                     )}
                   </td>
-                  <td className="px-0.5">
+                  <td className="px-0.5 text-center">
                     <button
                       className={`btn btn-xs btn-soft btn-success ${editingId === entry.id ? "hidden" : ""}`}
                       onClick={() => handlePagar(entry)}

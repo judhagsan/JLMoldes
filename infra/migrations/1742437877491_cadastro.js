@@ -12,6 +12,7 @@ exports.up = (pgm) => {
     nome: { type: "text", notNull: true },
     grupo: { type: "text", notNull: true },
     observacao: { type: "text", notNull: true },
+    comentario: { type: "text", notNull: true },
   });
 };
 
